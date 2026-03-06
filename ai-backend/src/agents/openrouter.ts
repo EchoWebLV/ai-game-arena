@@ -5,6 +5,7 @@ import {
   buildPokerPrompt,
   fallbackDecision,
   parseDecision,
+  cardToString,
 } from "./base";
 
 const AGENTS = [
@@ -36,7 +37,7 @@ export function getAgentInfo() {
   return AGENTS.map((a, i) => ({ idx: i, name: a.name, model: a.model }));
 }
 
-const SYSTEM_MSG = `You are a poker AI. You MUST respond with ONLY a single JSON object. No text before or after. No markdown. Example: {"action":"call","raise_amount":null,"reasoning":"pot odds justify a call"}`;
+const SYSTEM_MSG = `You are a poker AI. You MUST respond with ONLY a single JSON object. No text before or after. No markdown. The "reasoning" field MUST contain a non-empty explanation of your decision. Example: {"action":"call","raise_amount":null,"reasoning":"pot odds justify a call"}`;
 
 const MAX_RETRIES = 2;
 
@@ -79,6 +80,10 @@ export async function makeDecision(
         return fb;
       }
 
+      if (!decision.reasoning || !decision.reasoning.trim()) {
+        decision.reasoning = generateDefaultReasoning(decision.action, ctx);
+      }
+
       return decision;
     } catch (err: any) {
       console.warn(`[${agent.name}] OpenRouter error (attempt ${attempt + 1}/${MAX_RETRIES}): ${err.message?.slice(0, 120)}`);
@@ -87,6 +92,18 @@ export async function makeDecision(
   }
 
   return fallbackDecision(ctx);
+}
+
+function generateDefaultReasoning(action: string, ctx: GameContext): string {
+  const cards = ctx.my_hole_cards.map((c) => cardToString(c)).join("-");
+  switch (action) {
+    case "fold": return `Folding ${cards} — not strong enough for this spot.`;
+    case "check": return `Checking ${cards} — no need to build the pot here.`;
+    case "call": return `Calling with ${cards} — odds are acceptable.`;
+    case "raise": return `Raising with ${cards} — building the pot with a strong hand.`;
+    case "all_in": return `Going all-in with ${cards} — maximum pressure.`;
+    default: return `Playing ${cards}.`;
+  }
 }
 
 export const AI_NAMES = AGENTS.map((a) => a.name);
