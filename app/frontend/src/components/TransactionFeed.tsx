@@ -1,12 +1,13 @@
 "use client";
 
 import { useRef, useEffect } from "react";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, Zap, Globe } from "lucide-react";
 import clsx from "clsx";
 
 export interface TxEntry {
   label: string;
   sig: string;
+  layer: "base" | "er";
   txCount: number;
   timestamp: number;
 }
@@ -23,6 +24,7 @@ const LABEL_COLORS: Record<string, string> = {
   start_hand: "#3b82f6",
   post_blinds: "#6366f1",
   showdown: "#ef4444",
+  resolve_market: "#f59e0b",
 };
 
 function labelColor(label: string): string {
@@ -31,6 +33,8 @@ function labelColor(label: string): string {
   }
   if (label.startsWith("deal_")) return "#34d399";
   if (label.startsWith("init_player")) return "#f97316";
+  if (label.startsWith("delegate_")) return "#22d3ee";
+  if (label.startsWith("undelegate_")) return "#fb923c";
   if (label.startsWith("action_")) return "#60a5fa";
   if (label.includes("advance")) return "#818cf8";
   return "#94a3b8";
@@ -59,19 +63,28 @@ export default function TransactionFeed({ txs }: TransactionFeedProps) {
   }, [txs.length]);
 
   const recent = txs.slice(-80);
+  const baseCount = txs.filter((t) => t.layer === "base").length;
+  const erCount = txs.filter((t) => t.layer === "er").length;
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between mb-3 px-1">
+      <div className="flex items-center justify-between mb-2 px-1">
         <h3 className="text-sm font-semibold text-[var(--text-primary)] flex items-center gap-1.5">
           On-Chain Transactions
           <span className="text-[10px] font-mono text-[var(--text-muted)] font-normal">
             ({txs.length})
           </span>
         </h3>
-        <span className="text-[10px] font-mono text-green-400/70">
-          Solana Devnet
-        </span>
+        <div className="flex items-center gap-2 text-[9px] font-mono">
+          <span className="flex items-center gap-1 text-cyan-400/70">
+            <Globe size={8} />
+            {baseCount} devnet
+          </span>
+          <span className="flex items-center gap-1 text-[var(--gold)]/70">
+            <Zap size={8} />
+            {erCount} ER
+          </span>
+        </div>
       </div>
 
       <div
@@ -80,6 +93,8 @@ export default function TransactionFeed({ txs }: TransactionFeedProps) {
       >
         {recent.map((tx, i) => {
           const color = labelColor(tx.label);
+          const isBase = tx.layer === "base";
+
           return (
             <a
               key={`${tx.sig}-${i}`}
@@ -88,13 +103,14 @@ export default function TransactionFeed({ txs }: TransactionFeedProps) {
               rel="noopener noreferrer"
               className={clsx(
                 "flex items-center gap-1.5 text-[10px] py-[4px] px-1.5 rounded",
-                "transition-colors hover:bg-white/[0.04] group"
+                "transition-colors hover:bg-white/[0.04] group cursor-pointer"
               )}
             >
-              <span
-                className="w-1.5 h-1.5 rounded-full shrink-0"
-                style={{ background: color }}
-              />
+              {isBase ? (
+                <Globe size={8} className="text-cyan-400 shrink-0" />
+              ) : (
+                <Zap size={8} className="text-[var(--gold)] shrink-0" />
+              )}
               <span className="font-mono text-[var(--text-muted)] w-6 shrink-0 text-right">
                 #{tx.txCount}
               </span>
@@ -110,7 +126,12 @@ export default function TransactionFeed({ txs }: TransactionFeedProps) {
                 </span>
                 <ExternalLink
                   size={9}
-                  className="text-white/20 group-hover:text-[var(--gold)] transition-colors"
+                  className={clsx(
+                    "transition-colors",
+                    isBase
+                      ? "text-white/20 group-hover:text-cyan-400"
+                      : "text-white/20 group-hover:text-[var(--gold)]"
+                  )}
                 />
               </span>
             </a>
@@ -118,7 +139,7 @@ export default function TransactionFeed({ txs }: TransactionFeedProps) {
         })}
         {recent.length === 0 && (
           <div className="flex flex-col items-center justify-center py-8 text-[var(--text-muted)]">
-            <div className="text-2xl mb-2 opacity-30">⛓</div>
+            <div className="text-2xl mb-2 opacity-30">&#9939;</div>
             <div className="text-xs">No transactions yet...</div>
           </div>
         )}

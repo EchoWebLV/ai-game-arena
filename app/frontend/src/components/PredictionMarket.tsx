@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect } from "react";
 import dynamic from "next/dynamic";
 import { AI_PLAYERS } from "@/lib/constants";
+import AIAvatar from "./AIAvatar";
 import {
   placePredictionViaER,
   fetchMarketState,
@@ -237,10 +238,10 @@ export default function PredictionMarket({
               >
                 <div className="flex items-center gap-3">
                   <div
-                    className="w-9 h-9 rounded-lg flex items-center justify-center text-lg shrink-0"
+                    className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
                     style={{ background: `${ai.color}18`, border: `1px solid ${ai.color}30` }}
                   >
-                    {ai.avatar}
+                    <AIAvatar src={ai.avatar} name={ai.shortName} size={24} />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">

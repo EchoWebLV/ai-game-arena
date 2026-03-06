@@ -1,6 +1,7 @@
 "use client";
 
 import PokerCard from "./PokerCard";
+import AIAvatar from "./AIAvatar";
 import clsx from "clsx";
 
 interface AIPlayerSeatProps {
@@ -79,7 +80,7 @@ export default function AIPlayerSeat({
 
         {/* Avatar + name */}
         <div className="flex items-center gap-1.5 mb-1.5 justify-center">
-          <span className="text-lg">{avatar}</span>
+          <AIAvatar src={avatar} name={shortName} size={28} />
           <div className="text-left">
             <div className="text-[11px] font-semibold leading-tight" style={{ color }}>
               {shortName}

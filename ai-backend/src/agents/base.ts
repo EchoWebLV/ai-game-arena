@@ -38,7 +38,7 @@ export function roundName(round: number): string {
   return ["preflop", "flop", "turn", "river", "showdown"][round] || "unknown";
 }
 
-export function buildPokerPrompt(ctx: GameContext, personality: string): string {
+export function buildPokerPrompt(ctx: GameContext): string {
   const holeCards = ctx.my_hole_cards.map((c) => cardToString(c)).join(", ");
   const communityCards =
     ctx.community_cards.length > 0
@@ -52,7 +52,7 @@ export function buildPokerPrompt(ctx: GameContext, personality: string): string 
     )
     .join("\n");
 
-  return `You are an AI poker player in a Texas Hold'em tournament. ${personality}
+  return `You are a world-class poker AI competing in a Texas Hold'em tournament. Play optimally to win. Use pot odds, position, hand strength, and opponent tendencies to make the best possible decision.
 
 CURRENT GAME STATE:
 - Hand #${ctx.hand_number}, Round: ${ctx.current_round}
@@ -75,7 +75,10 @@ Available actions:
 - "raise": Raise to a specific amount (must be more than current raise)
 - "all_in": Bet all your remaining chips (${ctx.my_chips})
 
-Respond ONLY with valid JSON: {"action": "...", "raise_amount": number_or_null, "reasoning": "brief explanation"}`;
+IMPORTANT: You MUST respond with ONLY a single JSON object on one line. No markdown, no explanation, no code fences. Just raw JSON.
+Format: {"action": "fold|check|call|raise|all_in", "raise_amount": number_or_null, "reasoning": "one sentence"}
+Example: {"action": "call", "raise_amount": null, "reasoning": "Decent hand, pot odds justify a call"}
+YOUR RESPONSE (JSON only):`;
 }
 
 export function fallbackDecision(ctx: GameContext): PokerDecision {
@@ -88,22 +91,42 @@ export function fallbackDecision(ctx: GameContext): PokerDecision {
   return { action: "all_in", reasoning: "fallback: all-in" };
 }
 
+const VALID_ACTIONS = ["fold", "check", "call", "raise", "all_in"];
+
 export function parseDecision(raw: string): PokerDecision {
+  // Strip markdown code fences
+  let cleaned = raw.replace(/```(?:json)?\s*/gi, "").replace(/```/g, "").trim();
+
+  // Try full JSON parse first
   try {
-    const start = raw.indexOf("{");
-    const end = raw.lastIndexOf("}");
-    if (start === -1 || end === -1 || end <= start)
-      return { action: "fold", reasoning: "Failed to parse response" };
-    const parsed = JSON.parse(raw.slice(start, end + 1));
-    const validActions = ["fold", "check", "call", "raise", "all_in"];
-    if (!validActions.includes(parsed.action))
-      return { action: "fold", reasoning: "Invalid action returned" };
-    return {
-      action: parsed.action,
-      raise_amount: parsed.raise_amount ?? undefined,
-      reasoning: parsed.reasoning ?? "",
-    };
-  } catch {
-    return { action: "call", reasoning: "JSON parse error, defaulting to call" };
-  }
+    const start = cleaned.indexOf("{");
+    const end = cleaned.lastIndexOf("}");
+    if (start !== -1 && end > start) {
+      const parsed = JSON.parse(cleaned.slice(start, end + 1));
+      if (VALID_ACTIONS.includes(parsed.action)) {
+        return {
+          action: parsed.action,
+          raise_amount: parsed.raise_amount ?? undefined,
+          reasoning: parsed.reasoning ?? "",
+        };
+      }
+    }
+  } catch { /* fall through to regex extraction */ }
+
+  // Regex fallback: extract action and reasoning from malformed/truncated JSON
+  try {
+    const actionMatch = cleaned.match(/"action"\s*:\s*"(\w+)"/);
+    const reasonMatch = cleaned.match(/"reasoning"\s*:\s*"([^"]*)"/);
+    const raiseMatch = cleaned.match(/"raise_amount"\s*:\s*(\d+)/);
+
+    if (actionMatch && VALID_ACTIONS.includes(actionMatch[1])) {
+      return {
+        action: actionMatch[1] as PokerDecision["action"],
+        raise_amount: raiseMatch ? parseInt(raiseMatch[1]) : undefined,
+        reasoning: reasonMatch?.[1] ?? "",
+      };
+    }
+  } catch { /* fall through */ }
+
+  return { action: "fold", reasoning: "Failed to parse response" };
 }

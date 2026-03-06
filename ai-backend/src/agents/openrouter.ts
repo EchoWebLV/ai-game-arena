@@ -8,41 +8,11 @@ import {
 } from "./base";
 
 const AGENTS = [
-  {
-    name: "GPT-4 Shark",
-    model: "openai/gpt-4o",
-    personality:
-      "You are an aggressive, mathematically precise poker player. You calculate pot odds carefully and apply GTO (Game Theory Optimal) strategy. You bluff strategically and exploit weak players.",
-    temperature: 0.7,
-  },
-  {
-    name: "Claude Strategist",
-    model: "anthropic/claude-sonnet-4.6",
-    personality:
-      "You are a thoughtful, balanced poker player. You read opponents carefully and adjust your strategy dynamically. You prefer calculated risks over wild bluffs and focus on long-term chip preservation.",
-    temperature: 0.6,
-  },
-  {
-    name: "Gemini Wildcard",
-    model: "google/gemini-2.0-flash-001",
-    personality:
-      "You are an unpredictable, creative poker player. You mix up your playstyle constantly — sometimes ultra-aggressive, sometimes very tight. You love making unexpected moves to throw opponents off.",
-    temperature: 0.9,
-  },
-  {
-    name: "Llama Grinder",
-    model: "meta-llama/llama-3.1-70b-instruct",
-    personality:
-      "You are a tight-aggressive poker player. You only play strong hands but when you do, you bet big. You rarely bluff and wait patiently for premium hands to maximize value.",
-    temperature: 0.5,
-  },
-  {
-    name: "Mistral Bluffer",
-    model: "mistralai/mistral-large-2512",
-    personality:
-      "You are a loose-aggressive poker player who loves to bluff. You apply maximum pressure with frequent raises and re-raises. You thrive on making opponents fold better hands.",
-    temperature: 0.8,
-  },
+  { name: "GPT Shark", model: "openai/gpt-5.2-chat", temperature: 0.7 },
+  { name: "Claude Strategist", model: "anthropic/claude-sonnet-4.6", temperature: 0.7 },
+  { name: "Gemini Wildcard", model: "google/gemini-3.1-pro-preview", temperature: 0.7 },
+  { name: "Llama Grinder", model: "meta-llama/llama-3.1-70b-instruct", temperature: 0.7 },
+  { name: "Grok Bluffer", model: "x-ai/grok-3", temperature: 0.7 },
 ] as const;
 
 let client: OpenAI | null = null;
@@ -77,17 +47,21 @@ export async function makeDecision(
   if (!openai) return fallbackDecision(ctx);
 
   try {
-    const prompt = buildPokerPrompt(ctx, agent.personality);
+    const prompt = buildPokerPrompt(ctx);
     const response = await openai.chat.completions.create({
       model: agent.model,
       messages: [{ role: "user", content: prompt }],
-      max_tokens: 200,
+      max_tokens: 300,
       temperature: agent.temperature,
     });
     const raw = response.choices[0]?.message?.content ?? "";
-    return parseDecision(raw);
+    const decision = parseDecision(raw);
+    if (decision.reasoning === "Failed to parse response" || decision.reasoning === "JSON parse error, defaulting to call") {
+      console.warn(`[${agent.name}] Parse failed. Raw response:\n  "${raw.slice(0, 300)}"`);
+    }
+    return decision;
   } catch (err: any) {
-    console.warn(`[${agent.name}] OpenRouter error: ${err.message?.slice(0, 60)}`);
+    console.warn(`[${agent.name}] OpenRouter error: ${err.message?.slice(0, 120)}`);
     return fallbackDecision(ctx);
   }
 }

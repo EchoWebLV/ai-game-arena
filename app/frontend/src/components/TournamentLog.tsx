@@ -1,6 +1,7 @@
 "use client";
 
 import { AI_PLAYERS } from "@/lib/constants";
+import AIAvatar from "./AIAvatar";
 import { useRef, useEffect } from "react";
 import clsx from "clsx";
 import { Brain } from "lucide-react";
@@ -44,18 +45,18 @@ export default function TournamentLog({ logs, currentHand }: TournamentLogProps)
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between mb-3 px-1">
-        <h3 className="text-sm font-semibold text-[var(--text-primary)] flex items-center gap-1.5">
+        <h3 className="text-base font-semibold text-[var(--text-primary)] flex items-center gap-1.5">
           Live Action
-          <Brain size={12} className="text-[var(--gold)] opacity-60" />
+          <Brain size={14} className="text-[var(--gold)] opacity-60" />
         </h3>
-        <span className="text-[10px] font-mono text-[var(--text-muted)]">
+        <span className="text-xs font-mono text-[var(--text-muted)]">
           Hand #{currentHand}
         </span>
       </div>
 
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto space-y-1 min-h-0 pr-1"
+        className="flex-1 overflow-y-auto space-y-1.5 min-h-0 pr-1"
       >
         {recentLogs.map((log, i) => {
           const player = AI_PLAYERS[log.playerIdx];
@@ -72,34 +73,34 @@ export default function TournamentLog({ logs, currentHand }: TournamentLogProps)
             <div
               key={i}
               className={clsx(
-                "px-1.5 py-1 rounded",
-                isWin && "bg-[var(--gold)]/[0.04]",
-                isElim && "bg-red-500/[0.04]",
-                hasThought && "bg-white/[0.015]"
+                "px-2 py-1.5 rounded-lg",
+                isWin && "bg-[var(--gold)]/[0.06]",
+                isElim && "bg-red-500/[0.06]",
+                hasThought && "bg-white/[0.02] border border-white/[0.04]"
               )}
             >
-              <div className="flex items-center gap-1.5 text-[11px]">
-                <span className="text-[10px] text-[var(--text-muted)] font-mono w-5 shrink-0 text-right">
+              <div className="flex items-center gap-2 text-[13px]">
+                <span className="text-[11px] text-[var(--text-muted)] font-mono w-5 shrink-0 text-right">
                   {log.hand}
                 </span>
-                <span className="shrink-0">{player?.avatar}</span>
-                <span className="truncate" style={{ color: player?.color }}>
+                <AIAvatar src={player?.avatar} name={player?.shortName} size={18} className="shrink-0" />
+                <span className="font-medium" style={{ color: player?.color }}>
                   {player?.shortName}
                 </span>
-                <span className={clsx("truncate", actionStyle)}>
+                <span className={clsx("font-medium", actionStyle)}>
                   {log.action}
                   {log.amount && !isWin ? ` ${log.amount.toLocaleString()}` : ""}
                 </span>
                 {hasThought && (
-                  <Brain size={9} className="shrink-0 ml-auto text-[var(--gold)]/50" />
+                  <Brain size={11} className="shrink-0 ml-auto text-[var(--gold)]/60" />
                 )}
               </div>
 
               {hasThought && (
-                <div className="ml-[30px] mt-0.5 flex items-start gap-1">
-                  <span className="text-[9px] leading-relaxed text-[var(--text-muted)] italic line-clamp-2">
+                <div className="ml-[36px] mt-1 pl-2 border-l-2 border-[var(--gold)]/20">
+                  <p className="text-[12px] leading-[1.5] text-[var(--text-secondary)] italic">
                     &ldquo;{log.reasoning}&rdquo;
-                  </span>
+                  </p>
                 </div>
               )}
             </div>
@@ -108,7 +109,7 @@ export default function TournamentLog({ logs, currentHand }: TournamentLogProps)
         {recentLogs.length === 0 && (
           <div className="flex flex-col items-center justify-center py-8 text-[var(--text-muted)]">
             <div className="text-2xl mb-2 opacity-30">🂠</div>
-            <div className="text-xs">Waiting for cards to fly...</div>
+            <div className="text-sm">Waiting for cards to fly...</div>
           </div>
         )}
       </div>

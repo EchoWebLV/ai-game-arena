@@ -211,15 +211,16 @@ const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // ─── On-chain tournament orchestrator ─────────────────────────────────────────
 
-async function txLog(label: string, sig: string | null) {
+async function txLog(label: string, sig: string | null, layer: "base" | "er" = "er") {
   if (sig) {
     tournament.txCount++;
     tournament.lastTxSig = sig;
-    console.log(`  [TX] ${label}: ${sig.slice(0, 16)}…`);
+    console.log(`  [TX:${layer}] ${label}: ${sig.slice(0, 16)}…`);
     broadcast({
       type: "tx",
       label,
       sig,
+      layer,
       txCount: tournament.txCount,
       timestamp: Date.now(),
     });
@@ -234,19 +235,23 @@ async function runOnChainTournament() {
   try {
     // 1. Create tournament + player accounts on base layer
     console.log("[On-chain] Creating tournament...");
-    txLog("create_tournament", await pc.createTournament(tid, INITIAL_CHIPS, SMALL_BLIND, BIG_BLIND));
+    txLog("create_tournament", await pc.createTournament(tid, INITIAL_CHIPS, SMALL_BLIND, BIG_BLIND), "base");
 
     for (let i = 0; i < NUM_AGENTS; i++) {
-      txLog(`init_player_${i}`, await pc.initPlayer(tid, i));
+      txLog(`init_player_${i}`, await pc.initPlayer(tid, i), "base");
     }
 
     // 2. Open prediction market
-    txLog("open_market", await pc.openMarket(tid));
+    txLog("open_market", await pc.openMarket(tid), "base");
 
     // 3. Delegate ALL accounts to ER (tournament, game, market, 5 players)
     console.log("[On-chain] Delegating all accounts to Ephemeral Rollup...");
-    await pc.delegateAll(tid);
-    tournament.txCount += 8;
+    for (let i = 0; i < NUM_AGENTS; i++) {
+      txLog(`delegate_player_${i}`, await pc.delegatePlayer(tid, i), "base");
+    }
+    txLog("delegate_game", await pc.delegateGame(tid), "base");
+    txLog("delegate_market", await pc.delegateMarket(tid), "base");
+    txLog("delegate_tournament", await pc.delegateTournament(tid), "base");
 
     console.log("[On-chain] Waiting for ER to pick up delegation...");
     await delay(5000);
@@ -271,17 +276,17 @@ async function runOnChainTournament() {
     // 5. Resolve + undelegate (try, but don't fail the whole tournament)
     try {
       console.log("[On-chain] Resolving market...");
-      txLog("resolve_market", await pc.resolveMarket(tid));
+      txLog("resolve_market", await pc.resolveMarket(tid), "base");
     } catch (e: any) {
       console.warn("[On-chain] resolve_market error:", e.message?.slice(0, 80));
     }
     try {
-      txLog("undelegate_game", await pc.undelegateGame(tid));
+      txLog("undelegate_game", await pc.undelegateGame(tid), "base");
     } catch (e: any) {
       console.warn("[On-chain] undelegate_game error:", e.message?.slice(0, 80));
     }
     try {
-      txLog("undelegate_market", await pc.undelegateMarket(tid));
+      txLog("undelegate_market", await pc.undelegateMarket(tid), "base");
     } catch (e: any) {
       console.warn("[On-chain] undelegate_market error:", e.message?.slice(0, 80));
     }
@@ -398,6 +403,15 @@ async function playOnChainHand(tid: number, handNum: number) {
   for (let i = 0; i < NUM_AGENTS; i++) {
     tournament.chips[i] = finalTournament.playerChips[i].toNumber();
     tournament.active[i] = finalTournament.playerActive[i];
+  }
+
+  // Backend-side elimination guard: any player at 0 chips is out
+  for (let i = 0; i < NUM_AGENTS; i++) {
+    if (tournament.active[i] && tournament.chips[i] <= 0) {
+      tournament.active[i] = false;
+      tournament.chips[i] = 0;
+      console.log(`  ✗ ${AI_NAMES[i]} eliminated (0 chips)`);
+    }
   }
 
   const winners = tournament.active.map((v, i) => (v ? i : -1)).filter((i) => i >= 0);

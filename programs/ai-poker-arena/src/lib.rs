@@ -467,13 +467,9 @@ pub mod ai_poker_arena {
             }
         }
 
-        // Award pot to winner
         let pot = game.pot;
-        tournament.player_chips[winner_idx as usize] = tournament.player_chips[winner_idx as usize]
-            .checked_add(pot)
-            .ok_or(PokerError::ArithmeticOverflow)?;
 
-        // Update player chip totals and check eliminations
+        // Update player chip totals, award pot to winner, and check eliminations
         for i in 0..MAX_PLAYERS {
             // Subtract what they bet, add back if winner
             let bet = players[i].total_bet_this_hand;

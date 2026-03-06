@@ -7,6 +7,7 @@ import PredictionMarket from "@/components/PredictionMarket";
 import TournamentLog, { LogEntry } from "@/components/TournamentLog";
 import TransactionFeed, { TxEntry } from "@/components/TransactionFeed";
 import { AI_PLAYERS, BACKEND_URL } from "@/lib/constants";
+import AIAvatar from "@/components/AIAvatar";
 import { Zap, Shield, Dice5, Layers, Wifi, WifiOff, Trophy, RotateCcw } from "lucide-react";
 import clsx from "clsx";
 
@@ -210,6 +211,7 @@ export default function Home() {
           setTxs((prev) => [...prev.slice(-300), {
             label: msg.label,
             sig: msg.sig,
+            layer: msg.layer ?? "er",
             txCount: msg.txCount,
             timestamp: msg.timestamp ?? Date.now(),
           }]);
@@ -300,7 +302,7 @@ export default function Home() {
         {/* Winner banner */}
         {tournamentResult && (
           <div className="mb-6 p-5 rounded-2xl bg-gradient-to-r from-[var(--gold)]/[0.08] via-[var(--gold)]/[0.04] to-transparent border border-[var(--gold)]/20 flex items-center gap-4 animate-slide-up">
-            <div className="text-4xl">{AI_PLAYERS[tournamentResult.winnerIdx].avatar}</div>
+            <AIAvatar src={AI_PLAYERS[tournamentResult.winnerIdx].avatar} name={AI_PLAYERS[tournamentResult.winnerIdx].shortName} size={48} />
             <div>
               <div className="text-sm text-[var(--gold)] font-medium flex items-center gap-1.5">
                 <Trophy size={14} />
@@ -350,7 +352,7 @@ export default function Home() {
 
           {/* Live Feed */}
           <div>
-            <div className="bg-[var(--bg-card)] rounded-2xl border border-white/[0.04] p-4 h-[420px]">
+            <div className="bg-[var(--bg-card)] rounded-2xl border border-white/[0.04] p-4 h-[520px]">
               <TournamentLog logs={logs} currentHand={table.handNumber} />
             </div>
           </div>
@@ -366,7 +368,7 @@ export default function Home() {
                   return (
                     <div key={s.idx} className={clsx("flex items-center gap-2.5", !s.active && "opacity-25")}>
                       <span className="text-[11px] font-mono text-[var(--text-muted)] w-3 text-right">{rank + 1}</span>
-                      <span className="text-base">{ai.avatar}</span>
+                      <AIAvatar src={ai.avatar} name={ai.shortName} size={22} />
                       <div className="flex-1 min-w-0">
                         <div className="text-[11px] font-medium mb-0.5" style={{ color: ai.color }}>{ai.shortName}</div>
                         <div className="h-1 rounded-full bg-white/[0.06] overflow-hidden">
