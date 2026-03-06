@@ -623,6 +623,47 @@ pub mod ai_poker_arena {
         msg!("Game state committed to base layer");
         Ok(())
     }
+
+    /// Delegate market state to Ephemeral Rollup for ~50ms prediction bets.
+    pub fn delegate_market(ctx: Context<DelegateMarket>) -> Result<()> {
+        ctx.accounts.delegate_pda(
+            &ctx.accounts.payer,
+            &[
+                MARKET_SEED,
+                ctx.accounts.tournament.key().as_ref(),
+            ],
+            DelegateConfig {
+                validator: ctx.remaining_accounts.first().map(|acc| acc.key()),
+                ..Default::default()
+            },
+        )?;
+        msg!("Market state delegated to Ephemeral Rollup for fast predictions");
+        Ok(())
+    }
+
+    /// Commit market state and undelegate from ER back to base layer.
+    pub fn undelegate_market(ctx: Context<UndelegateMarket>) -> Result<()> {
+        commit_and_undelegate_accounts(
+            &ctx.accounts.payer,
+            vec![&ctx.accounts.market.to_account_info()],
+            &ctx.accounts.magic_context,
+            &ctx.accounts.magic_program,
+        )?;
+        msg!("Market state undelegated from Ephemeral Rollup");
+        Ok(())
+    }
+
+    /// Commit market state from ER to base layer (without undelegating).
+    pub fn commit_market_state(ctx: Context<UndelegateMarket>) -> Result<()> {
+        commit_accounts(
+            &ctx.accounts.payer,
+            vec![&ctx.accounts.market.to_account_info()],
+            &ctx.accounts.magic_context,
+            &ctx.accounts.magic_program,
+        )?;
+        msg!("Market state committed to base layer");
+        Ok(())
+    }
 }
 
 // ─── Contexts ────────────────────────────────────────────────────────────────
@@ -877,4 +918,26 @@ pub struct UndelegateGame<'info> {
 
     #[account(mut)]
     pub game_state: Account<'info, GameState>,
+}
+
+#[delegate]
+#[derive(Accounts)]
+pub struct DelegateMarket<'info> {
+    pub payer: Signer<'info>,
+
+    pub tournament: Account<'info, TournamentState>,
+
+    /// CHECK: The market PDA to delegate
+    #[account(mut, del)]
+    pub pda: AccountInfo<'info>,
+}
+
+#[commit]
+#[derive(Accounts)]
+pub struct UndelegateMarket<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+
+    #[account(mut)]
+    pub market: Account<'info, MarketState>,
 }

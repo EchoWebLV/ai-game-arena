@@ -1,12 +1,19 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import dynamic from "next/dynamic";
 import PokerTable from "@/components/PokerTable";
 import PredictionMarket from "@/components/PredictionMarket";
 import TournamentLog, { LogEntry } from "@/components/TournamentLog";
 import { AI_PLAYERS, BACKEND_URL } from "@/lib/constants";
 import { Play, RotateCcw, Zap, Shield, Dice5, Layers } from "lucide-react";
 import clsx from "clsx";
+
+const WalletNavButton = dynamic(() => import("@/components/WalletButton"), { ssr: false });
+const WalletAwarePredictionMarket = dynamic(
+  () => import("@/components/WalletAwarePredictionMarket"),
+  { ssr: false, loading: () => <PredictionMarket market={{ totalPool: 0, betsPerAi: [0,0,0,0,0], isOpen: true, isResolved: false, winningAi: null }} onPlaceBet={() => {}} userBets={[]} chipStandings={[]} /> }
+);
 
 interface PlayerData {
   chips: number;
@@ -281,6 +288,15 @@ export default function Home() {
               <Layers size={10} className="text-purple-400" />
               <span>BOLT ECS</span>
             </div>
+            <WalletNavButton
+              style={{
+                height: 32,
+                fontSize: 11,
+                borderRadius: 8,
+                padding: "0 12px",
+                background: "linear-gradient(135deg, #c41e3a, #8b1528)",
+              }}
+            />
           </div>
         </div>
       </nav>
@@ -362,11 +378,12 @@ export default function Home() {
           {/* Center: Prediction Market (THE CENTERPIECE) */}
           <div className="order-1 xl:order-2">
             <div className="bg-[var(--bg-card)] rounded-2xl border border-white/[0.04] p-5 xl:sticky xl:top-20">
-              <PredictionMarket
+              <WalletAwarePredictionMarket
                 market={market}
                 onPlaceBet={handlePlaceBet}
                 userBets={userBets}
                 chipStandings={chipStandings}
+                tournamentId={1}
               />
             </div>
           </div>
