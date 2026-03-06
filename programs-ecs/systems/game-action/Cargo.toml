@@ -1,0 +1,25 @@
+[package]
+name = "game-action"
+version = "0.1.0"
+description = "BOLT ECS System: Poker Game Actions"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "game_action"
+
+[features]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+cpi = ["no-entrypoint"]
+default = []
+idl-build = ["bolt-lang/idl-build"]
+anchor-debug = ["bolt-lang/anchor-debug"]
+custom-heap = []
+custom-panic = []
+
+[dependencies]
+bolt-lang.workspace = true
+game-state = { version = "0.1.0", path = "../../components/game-state", features = ["cpi"] }
+player-state = { version = "0.1.0", path = "../../components/player-state", features = ["cpi"] }

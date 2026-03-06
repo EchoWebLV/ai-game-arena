@@ -1,0 +1,125 @@
+@import "tailwindcss";
+
+:root {
+  --bg-primary: #0b0e14;
+  --bg-secondary: #111827;
+  --bg-card: #161d2e;
+  --bg-elevated: #1c2438;
+  --felt-green: #1a6b3c;
+  --felt-dark: #0f4424;
+  --felt-border: #2a1a0a;
+  --rail-wood: #3d2b1f;
+  --rail-light: #5c4033;
+  --gold: #c9a84c;
+  --gold-light: #e2c97e;
+  --gold-dark: #8a6d2b;
+  --crimson: #c41e3a;
+  --crimson-dark: #8b1528;
+  --crimson-light: #e8365a;
+  --text-primary: #f0ece4;
+  --text-secondary: #9ca3af;
+  --text-muted: #6b7280;
+  --card-white: #fffef7;
+  --card-shadow: rgba(0, 0, 0, 0.6);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--gold-dark); border-radius: 3px; }
+
+/* Card animations */
+@keyframes deal-in {
+  0% { transform: translate(0, -60px) rotate(-8deg) scale(0.7); opacity: 0; }
+  60% { transform: translate(0, 4px) rotate(1deg) scale(1.02); opacity: 1; }
+  100% { transform: translate(0, 0) rotate(0) scale(1); opacity: 1; }
+}
+@keyframes chip-bounce {
+  0% { transform: translateY(-20px) scale(0.8); opacity: 0; }
+  60% { transform: translateY(3px) scale(1.05); }
+  100% { transform: translateY(0) scale(1); opacity: 1; }
+}
+@keyframes pulse-ring {
+  0% { box-shadow: 0 0 0 0 rgba(201, 168, 76, 0.5); }
+  70% { box-shadow: 0 0 0 12px rgba(201, 168, 76, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(201, 168, 76, 0); }
+}
+@keyframes slide-up {
+  from { transform: translateY(10px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.animate-deal { animation: deal-in 0.45s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.animate-chip { animation: chip-bounce 0.35s ease-out; }
+.animate-pulse-ring { animation: pulse-ring 2s ease-in-out infinite; }
+.animate-slide-up { animation: slide-up 0.3s ease-out; }
+.animate-fade-in { animation: fade-in 0.4s ease-out; }
+
+.shimmer-gold {
+  background: linear-gradient(90deg, var(--gold-dark) 0%, var(--gold-light) 50%, var(--gold-dark) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 3s linear infinite;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Felt table */
+.felt-surface {
+  background: radial-gradient(ellipse at 50% 45%, #1f7a45 0%, #176035 30%, #0f4424 70%, #0a3018 100%);
+  box-shadow:
+    inset 0 0 100px rgba(0,0,0,0.4),
+    inset 0 2px 0 rgba(255,255,255,0.04);
+}
+.table-rail {
+  background: linear-gradient(180deg, #5c4033 0%, #3d2b1f 40%, #2a1a0a 100%);
+  box-shadow:
+    0 0 40px rgba(0,0,0,0.7),
+    inset 0 1px 0 rgba(255,255,255,0.08),
+    inset 0 -1px 0 rgba(0,0,0,0.5);
+}
+
+/* Poker card realistic styles */
+.poker-card-face {
+  background: linear-gradient(160deg, #fffef7 0%, #f5f0e0 100%);
+  border: 1px solid #d4cdb8;
+  border-radius: 6px;
+  box-shadow:
+    1px 2px 6px rgba(0,0,0,0.35),
+    inset 0 0 0 3px #fff,
+    inset 0 0 0 4px #d4cdb8;
+  font-family: 'Georgia', 'Times New Roman', serif;
+}
+.poker-card-back {
+  background:
+    repeating-conic-gradient(#1e3a5f 0% 25%, #253f66 0% 50%) 50% / 8px 8px;
+  border: 1px solid #4a7ab5;
+  border-radius: 6px;
+  box-shadow:
+    1px 2px 6px rgba(0,0,0,0.35),
+    inset 0 0 0 3px #2a4e7a,
+    inset 0 0 0 4.5px #4a7ab5;
+}
+
+/* Prediction market bar */
+.odds-bar {
+  transition: width 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+}
