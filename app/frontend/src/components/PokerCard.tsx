@@ -1,6 +1,7 @@
 "use client";
 
-import { cardToDisplay } from "@/lib/constants";
+import { ComponentType, useMemo } from "react";
+import * as deck from "@letele/playing-cards";
 import clsx from "clsx";
 
 interface PokerCardProps {
@@ -11,67 +12,65 @@ interface PokerCardProps {
 }
 
 const SIZE_MAP = {
-  xs: { card: "w-8 h-11", rankText: "text-[9px]", suitText: "text-[10px]", centerSuit: "text-sm" },
-  sm: { card: "w-11 h-[62px]", rankText: "text-[11px]", suitText: "text-[11px]", centerSuit: "text-lg" },
-  md: { card: "w-[58px] h-[82px]", rankText: "text-sm", suitText: "text-sm", centerSuit: "text-2xl" },
-  lg: { card: "w-[76px] h-[106px]", rankText: "text-lg", suitText: "text-base", centerSuit: "text-3xl" },
+  xs: { w: 32, h: 45 },
+  sm: { w: 44, h: 62 },
+  md: { w: 58, h: 82 },
+  lg: { w: 76, h: 106 },
 };
+
+const RANK_NAMES = ["2", "3", "4", "5", "6", "7", "8", "9", "10", "j", "q", "k", "a"];
+const SUIT_LETTERS = ["H", "D", "C", "S"];
+
+const cardLib = deck as Record<string, ComponentType<React.SVGProps<SVGSVGElement>>>;
+const CardBack = cardLib["B1"];
+
+function getCardComponent(cardIdx: number): ComponentType<React.SVGProps<SVGSVGElement>> | null {
+  if (cardIdx < 0 || cardIdx >= 52 || cardIdx === 255) return null;
+  const rank = RANK_NAMES[cardIdx % 13];
+  const suit = SUIT_LETTERS[Math.floor(cardIdx / 13)];
+  const key = `${suit}${rank}`;
+  return cardLib[key] ?? null;
+}
 
 export default function PokerCard({ cardIdx, faceDown = false, size = "md", delay = 0 }: PokerCardProps) {
   const s = SIZE_MAP[size];
 
+  const Card = useMemo(() => (faceDown ? null : getCardComponent(cardIdx)), [cardIdx, faceDown]);
+
   if (faceDown) {
     return (
       <div
-        className={clsx(s.card, "poker-card-back rounded-md flex items-center justify-center select-none animate-deal")}
-        style={{ animationDelay: `${delay}ms` }}
+        className="rounded-md overflow-hidden select-none animate-deal shadow-md"
+        style={{ width: s.w, height: s.h, animationDelay: `${delay}ms` }}
       >
-        <div className="w-[70%] h-[75%] rounded-sm border border-blue-400/30 flex items-center justify-center">
-          <span className="text-blue-300/30 font-bold text-xs">AI</span>
-        </div>
+        {CardBack ? (
+          <CardBack style={{ width: "100%", height: "100%" }} />
+        ) : (
+          <div
+            className="w-full h-full poker-card-back flex items-center justify-center"
+          >
+            <span className="text-blue-300/30 font-bold text-xs">AI</span>
+          </div>
+        )}
       </div>
     );
   }
 
-  const { rank, suit, suitColor } = cardToDisplay(cardIdx);
-
-  if (rank === "?") {
+  if (!Card) {
     return (
-      <div className={clsx(s.card, "rounded-md border border-white/5 bg-white/[0.03]")} />
+      <div
+        className="rounded-md border border-white/5 bg-white/[0.03]"
+        style={{ width: s.w, height: s.h }}
+      />
     );
   }
 
   return (
     <div
-      className={clsx(s.card, "poker-card-face rounded-md flex flex-col relative select-none animate-deal overflow-hidden")}
-      style={{ animationDelay: `${delay}ms` }}
+      className="rounded-md overflow-hidden select-none animate-deal shadow-md"
+      style={{ width: s.w, height: s.h, animationDelay: `${delay}ms` }}
     >
-      {/* Top-left rank/suit */}
-      <div className="absolute top-[3px] left-[4px] leading-none flex flex-col items-center">
-        <span className={clsx(s.rankText, "font-bold leading-tight")} style={{ color: suitColor }}>
-          {rank}
-        </span>
-        <span className={clsx(s.suitText, "leading-tight -mt-[1px]")} style={{ color: suitColor }}>
-          {suit}
-        </span>
-      </div>
-
-      {/* Center suit */}
-      <div className="flex-1 flex items-center justify-center">
-        <span className={s.centerSuit} style={{ color: suitColor }}>
-          {suit}
-        </span>
-      </div>
-
-      {/* Bottom-right rank/suit (inverted) */}
-      <div className="absolute bottom-[3px] right-[4px] leading-none flex flex-col items-center rotate-180">
-        <span className={clsx(s.rankText, "font-bold leading-tight")} style={{ color: suitColor }}>
-          {rank}
-        </span>
-        <span className={clsx(s.suitText, "leading-tight -mt-[1px]")} style={{ color: suitColor }}>
-          {suit}
-        </span>
-      </div>
+      <Card style={{ width: "100%", height: "100%" }} />
     </div>
   );
 }

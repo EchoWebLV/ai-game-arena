@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import AIPlayerSeat from "./AIPlayerSeat";
 import PokerCard from "./PokerCard";
 import { AI_PLAYERS } from "@/lib/constants";
+import { B1 as CardBack } from "@letele/playing-cards";
 import clsx from "clsx";
 
 interface PlayerData {
@@ -241,17 +242,8 @@ export default function PokerTable({ players, table }: PokerTableProps) {
             } as React.CSSProperties
           }
         >
-          <div className="poker-card-back rounded-md" style={{ width: 32, height: 44 }}>
-            <div className="w-full h-full flex items-center justify-center">
-              <div
-                className="rounded-sm border"
-                style={{
-                  width: "70%",
-                  height: "75%",
-                  borderColor: "rgba(74, 122, 181, 0.3)",
-                }}
-              />
-            </div>
+          <div className="rounded-md overflow-hidden shadow-md" style={{ width: 32, height: 45 }}>
+            <CardBack style={{ width: "100%", height: "100%" }} />
           </div>
         </div>
       ))}
