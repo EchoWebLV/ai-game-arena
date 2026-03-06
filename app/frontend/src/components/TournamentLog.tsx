@@ -3,6 +3,7 @@
 import { AI_PLAYERS } from "@/lib/constants";
 import { useRef, useEffect } from "react";
 import clsx from "clsx";
+import { Brain } from "lucide-react";
 
 export interface LogEntry {
   hand: number;
@@ -11,6 +12,7 @@ export interface LogEntry {
   action: string;
   amount?: number;
   pot: number;
+  reasoning?: string;
   timestamp: number;
 }
 
@@ -42,7 +44,10 @@ export default function TournamentLog({ logs, currentHand }: TournamentLogProps)
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between mb-3 px-1">
-        <h3 className="text-sm font-semibold text-[var(--text-primary)]">Live Action</h3>
+        <h3 className="text-sm font-semibold text-[var(--text-primary)] flex items-center gap-1.5">
+          Live Action
+          <Brain size={12} className="text-[var(--gold)] opacity-60" />
+        </h3>
         <span className="text-[10px] font-mono text-[var(--text-muted)]">
           Hand #{currentHand}
         </span>
@@ -50,12 +55,13 @@ export default function TournamentLog({ logs, currentHand }: TournamentLogProps)
 
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto space-y-px min-h-0 pr-1"
+        className="flex-1 overflow-y-auto space-y-1 min-h-0 pr-1"
       >
         {recentLogs.map((log, i) => {
           const player = AI_PLAYERS[log.playerIdx];
           const isWin = log.action.startsWith("WINS");
           const isElim = log.action === "ELIMINATED";
+          const hasThought = !!log.reasoning && log.reasoning.length > 2 && !isWin && !isElim && !log.reasoning.startsWith("fallback");
           const actionStyle = isWin
             ? "text-[var(--gold)] font-semibold"
             : isElim
@@ -66,22 +72,36 @@ export default function TournamentLog({ logs, currentHand }: TournamentLogProps)
             <div
               key={i}
               className={clsx(
-                "flex items-center gap-1.5 text-[11px] py-[3px] px-1.5 rounded",
+                "px-1.5 py-1 rounded",
                 isWin && "bg-[var(--gold)]/[0.04]",
-                isElim && "bg-red-500/[0.04]"
+                isElim && "bg-red-500/[0.04]",
+                hasThought && "bg-white/[0.015]"
               )}
             >
-              <span className="text-[10px] text-[var(--text-muted)] font-mono w-5 shrink-0 text-right">
-                {log.hand}
-              </span>
-              <span className="shrink-0">{player?.avatar}</span>
-              <span className="truncate" style={{ color: player?.color }}>
-                {player?.shortName}
-              </span>
-              <span className={clsx("truncate", actionStyle)}>
-                {log.action}
-                {log.amount && !isWin ? ` ${log.amount.toLocaleString()}` : ""}
-              </span>
+              <div className="flex items-center gap-1.5 text-[11px]">
+                <span className="text-[10px] text-[var(--text-muted)] font-mono w-5 shrink-0 text-right">
+                  {log.hand}
+                </span>
+                <span className="shrink-0">{player?.avatar}</span>
+                <span className="truncate" style={{ color: player?.color }}>
+                  {player?.shortName}
+                </span>
+                <span className={clsx("truncate", actionStyle)}>
+                  {log.action}
+                  {log.amount && !isWin ? ` ${log.amount.toLocaleString()}` : ""}
+                </span>
+                {hasThought && (
+                  <Brain size={9} className="shrink-0 ml-auto text-[var(--gold)]/50" />
+                )}
+              </div>
+
+              {hasThought && (
+                <div className="ml-[30px] mt-0.5 flex items-start gap-1">
+                  <span className="text-[9px] leading-relaxed text-[var(--text-muted)] italic line-clamp-2">
+                    &ldquo;{log.reasoning}&rdquo;
+                  </span>
+                </div>
+              )}
             </div>
           );
         })}

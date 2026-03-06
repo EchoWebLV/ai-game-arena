@@ -8,7 +8,7 @@ import {
 } from "@solana/web3.js";
 import { BN, BorshCoder, Idl } from "@coral-xyz/anchor";
 
-const PROGRAM_ID = new PublicKey("PoKRx1DqBQA1cMYzSy1W4y1Q7D5M5GCBia1mVnFqJVw");
+const PROGRAM_ID = new PublicKey("BJSCnCFb475uHPTi6Lee2E5SU2GToyRQEgqHJUbsN5ob");
 
 const TOURNAMENT_SEED = Buffer.from("tournament");
 const GAME_STATE_SEED = Buffer.from("game_state");

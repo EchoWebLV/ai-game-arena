@@ -5,16 +5,10 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
-ai_poker_arena = "PoKRx1DqBQA1cMYzSy1W4y1Q7D5M5GCBia1mVnFqJVw"
-game_state = "H5tYBDgY6ubcAbR8e2EDK3Lq39E1ABpwjxBqYmnTk6mG"
-player_state = "3rP5pWrWPNXWWQrD6dKypNXgMZkzZHgLMDm77nePzHnR"
-game_action = "HTU8dhsybkio6AoK7hsfaGV7DHRHmfc4aqPzVg4GGms"
+ai_poker_arena = "BJSCnCFb475uHPTi6Lee2E5SU2GToyRQEgqHJUbsN5ob"
 
 [programs.devnet]
-ai_poker_arena = "PoKRx1DqBQA1cMYzSy1W4y1Q7D5M5GCBia1mVnFqJVw"
-game_state = "H5tYBDgY6ubcAbR8e2EDK3Lq39E1ABpwjxBqYmnTk6mG"
-player_state = "3rP5pWrWPNXWWQrD6dKypNXgMZkzZHgLMDm77nePzHnR"
-game_action = "HTU8dhsybkio6AoK7hsfaGV7DHRHmfc4aqPzVg4GGms"
+ai_poker_arena = "BJSCnCFb475uHPTi6Lee2E5SU2GToyRQEgqHJUbsN5ob"
 
 [registry]
 url = "https://api.apr.dev"
@@ -24,7 +18,7 @@ cluster = "devnet"
 wallet = "~/.config/solana/id.json"
 
 [workspace]
-members = ["programs/*", "programs-ecs/components/*", "programs-ecs/systems/*"]
+members = ["programs/*"]
 
 [scripts]
 test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"

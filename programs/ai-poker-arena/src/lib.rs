@@ -1,4 +1,4 @@
-use bolt_lang::prelude::*;
+use anchor_lang::prelude::*;
 use ephemeral_rollups_sdk::anchor::{commit, delegate, ephemeral};
 use ephemeral_rollups_sdk::cpi::DelegateConfig;
 use ephemeral_rollups_sdk::ephem::{commit_accounts, commit_and_undelegate_accounts};
@@ -12,7 +12,7 @@ use constants::*;
 use errors::PokerError;
 use state::*;
 
-declare_id!("PoKRx1DqBQA1cMYzSy1W4y1Q7D5M5GCBia1mVnFqJVw");
+declare_id!("BJSCnCFb475uHPTi6Lee2E5SU2GToyRQEgqHJUbsN5ob");
 
 #[ephemeral]
 #[program]
@@ -583,6 +583,41 @@ pub mod ai_poker_arena {
         Ok(())
     }
 
+    /// Delegate tournament state to Ephemeral Rollup.
+    pub fn delegate_tournament(ctx: Context<DelegateTournament>, tournament_id: u64) -> Result<()> {
+        ctx.accounts.delegate_pda(
+            &ctx.accounts.payer,
+            &[
+                TOURNAMENT_SEED,
+                &tournament_id.to_le_bytes(),
+            ],
+            DelegateConfig {
+                validator: ctx.remaining_accounts.first().map(|acc| acc.key()),
+                ..Default::default()
+            },
+        )?;
+        msg!("Tournament state delegated to Ephemeral Rollup");
+        Ok(())
+    }
+
+    /// Delegate player state to Ephemeral Rollup.
+    pub fn delegate_player(ctx: Context<DelegatePlayer>, _player_idx: u8) -> Result<()> {
+        ctx.accounts.delegate_pda(
+            &ctx.accounts.payer,
+            &[
+                PLAYER_STATE_SEED,
+                ctx.accounts.game_state.key().as_ref(),
+                &[_player_idx],
+            ],
+            DelegateConfig {
+                validator: ctx.remaining_accounts.first().map(|acc| acc.key()),
+                ..Default::default()
+            },
+        )?;
+        msg!("Player {} state delegated to Ephemeral Rollup", _player_idx);
+        Ok(())
+    }
+
     /// Delegate game state to Ephemeral Rollup for real-time play.
     pub fn delegate_game(ctx: Context<DelegateGame>) -> Result<()> {
         ctx.accounts.delegate_pda(
@@ -896,6 +931,28 @@ pub struct ClaimWinnings<'info> {
         constraint = user_bet.user == user.key()
     )]
     pub user_bet: Account<'info, UserBet>,
+}
+
+#[delegate]
+#[derive(Accounts)]
+pub struct DelegateTournament<'info> {
+    pub payer: Signer<'info>,
+
+    /// CHECK: The tournament PDA to delegate
+    #[account(mut, del)]
+    pub pda: AccountInfo<'info>,
+}
+
+#[delegate]
+#[derive(Accounts)]
+pub struct DelegatePlayer<'info> {
+    pub payer: Signer<'info>,
+
+    pub game_state: Account<'info, GameState>,
+
+    /// CHECK: The player state PDA to delegate
+    #[account(mut, del)]
+    pub pda: AccountInfo<'info>,
 }
 
 #[delegate]

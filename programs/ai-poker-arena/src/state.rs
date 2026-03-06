@@ -1,4 +1,4 @@
-use bolt_lang::prelude::*;
+use anchor_lang::prelude::*;
 use crate::constants::*;
 
 #[account]

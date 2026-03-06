@@ -1,7 +1,7 @@
 export interface GameContext {
   hand_number: number;
   pot: number;
-  current_round: string; // "preflop" | "flop" | "turn" | "river"
+  current_round: string;
   community_cards: number[];
   my_hole_cards: [number, number];
   my_chips: number;
@@ -10,7 +10,7 @@ export interface GameContext {
   small_blind: number;
   big_blind: number;
   last_raise: number;
-  position: string; // "dealer" | "small_blind" | "big_blind" | "early" | "late"
+  position: string;
 }
 
 export interface OpponentInfo {
@@ -29,25 +29,9 @@ export interface PokerDecision {
 }
 
 export function cardToString(card: number): string {
-  const ranks = [
-    "2",
-    "3",
-    "4",
-    "5",
-    "6",
-    "7",
-    "8",
-    "9",
-    "10",
-    "J",
-    "Q",
-    "K",
-    "A",
-  ];
+  const ranks = ["2","3","4","5","6","7","8","9","10","J","Q","K","A"];
   const suits = ["♥", "♦", "♣", "♠"];
-  const rank = ranks[card % 13];
-  const suit = suits[Math.floor(card / 13)];
-  return `${rank}${suit}`;
+  return `${ranks[card % 13]}${suits[Math.floor(card / 13)]}`;
 }
 
 export function roundName(round: number): string {
@@ -55,9 +39,7 @@ export function roundName(round: number): string {
 }
 
 export function buildPokerPrompt(ctx: GameContext, personality: string): string {
-  const holeCards = ctx.my_hole_cards
-    .map((c) => cardToString(c))
-    .join(", ");
+  const holeCards = ctx.my_hole_cards.map((c) => cardToString(c)).join(", ");
   const communityCards =
     ctx.community_cards.length > 0
       ? ctx.community_cards.filter((c) => c !== 255).map((c) => cardToString(c)).join(", ")
@@ -96,31 +78,32 @@ Available actions:
 Respond ONLY with valid JSON: {"action": "...", "raise_amount": number_or_null, "reasoning": "brief explanation"}`;
 }
 
-export abstract class BaseAgent {
-  abstract name: string;
-  abstract modelId: string;
-  abstract personality: string;
+export function fallbackDecision(ctx: GameContext): PokerDecision {
+  const callCost = Math.max(0, ctx.last_raise - ctx.my_current_bet);
+  const r = Math.random();
+  if (r < 0.10) return { action: "fold", reasoning: "fallback: fold" };
+  if (r < 0.40 && callCost === 0) return { action: "check", reasoning: "fallback: check" };
+  if (r < 0.75) return { action: "call", reasoning: "fallback: call" };
+  if (r < 0.92) return { action: "raise", raise_amount: ctx.last_raise * 2, reasoning: "fallback: raise" };
+  return { action: "all_in", reasoning: "fallback: all-in" };
+}
 
-  abstract makeDecision(ctx: GameContext): Promise<PokerDecision>;
-
-  protected parseDecision(raw: string): PokerDecision {
-    try {
-      const jsonMatch = raw.match(/\{[^}]+\}/);
-      if (!jsonMatch) {
-        return { action: "fold", reasoning: "Failed to parse response" };
-      }
-      const parsed = JSON.parse(jsonMatch[0]);
-      const validActions = ["fold", "check", "call", "raise", "all_in"];
-      if (!validActions.includes(parsed.action)) {
-        return { action: "fold", reasoning: "Invalid action returned" };
-      }
-      return {
-        action: parsed.action,
-        raise_amount: parsed.raise_amount ?? undefined,
-        reasoning: parsed.reasoning ?? "",
-      };
-    } catch {
-      return { action: "call", reasoning: "JSON parse error, defaulting to call" };
-    }
+export function parseDecision(raw: string): PokerDecision {
+  try {
+    const start = raw.indexOf("{");
+    const end = raw.lastIndexOf("}");
+    if (start === -1 || end === -1 || end <= start)
+      return { action: "fold", reasoning: "Failed to parse response" };
+    const parsed = JSON.parse(raw.slice(start, end + 1));
+    const validActions = ["fold", "check", "call", "raise", "all_in"];
+    if (!validActions.includes(parsed.action))
+      return { action: "fold", reasoning: "Invalid action returned" };
+    return {
+      action: parsed.action,
+      raise_amount: parsed.raise_amount ?? undefined,
+      reasoning: parsed.reasoning ?? "",
+    };
+  } catch {
+    return { action: "call", reasoning: "JSON parse error, defaulting to call" };
   }
 }
