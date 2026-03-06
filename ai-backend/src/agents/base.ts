@@ -1,3 +1,11 @@
+export interface ActionRecord {
+  player_idx: number;
+  ai_model: string;
+  round: string;
+  action: string;
+  amount?: number;
+}
+
 export interface GameContext {
   hand_number: number;
   pot: number;
@@ -11,6 +19,7 @@ export interface GameContext {
   big_blind: number;
   last_raise: number;
   position: string;
+  action_history: ActionRecord[];
 }
 
 export interface OpponentInfo {
@@ -52,7 +61,15 @@ export function buildPokerPrompt(ctx: GameContext): string {
     )
     .join("\n");
 
+  const historyLines = ctx.action_history.length > 0
+    ? ctx.action_history
+        .map((a) => `  [${a.round}] ${a.ai_model} → ${a.action}${a.amount ? ` (${a.amount})` : ""}`)
+        .join("\n")
+    : "  (no actions yet this hand)";
+
   return `You are a world-class poker AI competing in a Texas Hold'em tournament. Play optimally to win. Use pot odds, position, hand strength, and opponent tendencies to make the best possible decision.
+
+You do NOT know other players' hole cards. Analyze their betting patterns and actions below to infer hand strength and adjust your strategy.
 
 CURRENT GAME STATE:
 - Hand #${ctx.hand_number}, Round: ${ctx.current_round}
@@ -67,6 +84,9 @@ CURRENT GAME STATE:
 
 ACTIVE OPPONENTS:
 ${opponentsSummary}
+
+ACTION HISTORY THIS HAND:
+${historyLines}
 
 Available actions:
 - "fold": Give up this hand
@@ -93,40 +113,80 @@ export function fallbackDecision(ctx: GameContext): PokerDecision {
 
 const VALID_ACTIONS = ["fold", "check", "call", "raise", "all_in"];
 
+const ACTION_ALIASES: Record<string, PokerDecision["action"]> = {
+  fold: "fold",
+  check: "check",
+  call: "call",
+  raise: "raise",
+  all_in: "all_in",
+  "all-in": "all_in",
+  allin: "all_in",
+  bet: "raise",
+};
+
+function normalizeAction(raw: string): PokerDecision["action"] | null {
+  const lower = raw.toLowerCase().replace(/[^a-z_-]/g, "");
+  return ACTION_ALIASES[lower] ?? null;
+}
+
 export function parseDecision(raw: string): PokerDecision {
-  // Strip markdown code fences
-  let cleaned = raw.replace(/```(?:json)?\s*/gi, "").replace(/```/g, "").trim();
+  if (!raw || !raw.trim()) return { action: "fold", reasoning: "Failed to parse response" };
+
+  // Strip markdown code fences and leading/trailing prose
+  let cleaned = raw
+    .replace(/```(?:json)?\s*/gi, "")
+    .replace(/```/g, "")
+    .trim();
 
   // Try full JSON parse first
   try {
     const start = cleaned.indexOf("{");
     const end = cleaned.lastIndexOf("}");
     if (start !== -1 && end > start) {
-      const parsed = JSON.parse(cleaned.slice(start, end + 1));
-      if (VALID_ACTIONS.includes(parsed.action)) {
+      const jsonStr = cleaned.slice(start, end + 1);
+      const parsed = JSON.parse(jsonStr);
+      const action = normalizeAction(String(parsed.action ?? ""));
+      if (action) {
         return {
-          action: parsed.action,
-          raise_amount: parsed.raise_amount ?? undefined,
-          reasoning: parsed.reasoning ?? "",
+          action,
+          raise_amount: parsed.raise_amount != null ? Number(parsed.raise_amount) || undefined : undefined,
+          reasoning: String(parsed.reasoning ?? ""),
         };
       }
     }
   } catch { /* fall through to regex extraction */ }
 
-  // Regex fallback: extract action and reasoning from malformed/truncated JSON
+  // Regex fallback: extract fields from malformed/truncated JSON
   try {
-    const actionMatch = cleaned.match(/"action"\s*:\s*"(\w+)"/);
+    const actionMatch = cleaned.match(/"action"\s*:\s*"([^"]+)"/);
     const reasonMatch = cleaned.match(/"reasoning"\s*:\s*"([^"]*)"/);
     const raiseMatch = cleaned.match(/"raise_amount"\s*:\s*(\d+)/);
 
-    if (actionMatch && VALID_ACTIONS.includes(actionMatch[1])) {
-      return {
-        action: actionMatch[1] as PokerDecision["action"],
-        raise_amount: raiseMatch ? parseInt(raiseMatch[1]) : undefined,
-        reasoning: reasonMatch?.[1] ?? "",
-      };
+    if (actionMatch) {
+      const action = normalizeAction(actionMatch[1]);
+      if (action) {
+        return {
+          action,
+          raise_amount: raiseMatch ? parseInt(raiseMatch[1]) : undefined,
+          reasoning: reasonMatch?.[1] ?? "",
+        };
+      }
     }
   } catch { /* fall through */ }
+
+  // Last resort: scan for any action keyword in the raw text
+  const lower = cleaned.toLowerCase();
+  for (const keyword of ["all_in", "all-in", "raise", "call", "check", "fold"]) {
+    if (lower.includes(keyword)) {
+      const action = normalizeAction(keyword)!;
+      const raiseMatch = cleaned.match(/(\d{3,})/);
+      return {
+        action,
+        raise_amount: action === "raise" && raiseMatch ? parseInt(raiseMatch[1]) : undefined,
+        reasoning: cleaned.slice(0, 100).replace(/[{}"\n]/g, " ").trim(),
+      };
+    }
+  }
 
   return { action: "fold", reasoning: "Failed to parse response" };
 }

@@ -40,6 +40,7 @@ export default function AIPlayerSeat({
   position,
 }: AIPlayerSeatProps) {
   const dimmed = isEliminated || isFolded;
+  const showTurn = isCurrentTurn && !isFolded && !isEliminated;
 
   return (
     <div
@@ -59,13 +60,13 @@ export default function AIPlayerSeat({
         className={clsx(
           "relative rounded-xl p-2.5 min-w-[120px] text-center transition-all duration-300",
           dimmed && "opacity-35 grayscale",
-          isCurrentTurn && "animate-pulse-ring"
+          showTurn && "animate-pulse-ring"
         )}
         style={{
-          background: isCurrentTurn
+          background: showTurn
             ? `linear-gradient(145deg, rgba(201,168,76,0.15), rgba(201,168,76,0.05))`
             : `linear-gradient(145deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01))`,
-          border: isCurrentTurn
+          border: showTurn
             ? "1.5px solid rgba(201,168,76,0.6)"
             : "1px solid rgba(255,255,255,0.06)",
           backdropFilter: "blur(8px)",
@@ -96,8 +97,8 @@ export default function AIPlayerSeat({
             <span className="text-[10px] text-gray-500 font-medium tracking-wide uppercase">Fold</span>
           ) : (
             <>
-              <PokerCard cardIdx={holeCards[0]} faceDown={!showCards} size="xs" delay={0} />
-              <PokerCard cardIdx={holeCards[1]} faceDown={!showCards} size="xs" delay={80} />
+              <PokerCard cardIdx={holeCards[0]} faceDown={holeCards[0] === 255} size="xs" delay={0} />
+              <PokerCard cardIdx={holeCards[1]} faceDown={holeCards[1] === 255} size="xs" delay={80} />
             </>
           )}
         </div>

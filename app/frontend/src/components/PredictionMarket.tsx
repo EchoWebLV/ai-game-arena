@@ -248,7 +248,7 @@ export default function PredictionMarket({
                       <span className="text-sm font-semibold" style={{ color: ai.color }}>{ai.name}</span>
                       {isWinner && <Trophy size={13} className="text-[var(--gold)]" />}
                     </div>
-                    <div className="text-[10px] text-[var(--text-muted)]">{ai.style}</div>
+                    <div className="text-[10px] text-[var(--text-muted)]">{ai.model}</div>
                   </div>
                   <div className="text-right shrink-0">
                     <div className="text-sm font-bold font-mono text-[var(--text-primary)]">{prob.toFixed(1)}%</div>
@@ -280,9 +280,6 @@ export default function PredictionMarket({
                     <div>
                       <div className="text-[var(--text-muted)] mb-0.5">Bet Volume</div>
                       <div className="font-mono text-[var(--text-primary)]">{(activeMarket.betsPerAi[ai.idx] / 1e9).toFixed(2)} SOL</div>
-                    </div>
-                    <div className="col-span-2">
-                      <div className="text-[var(--text-muted)]">{ai.description}</div>
                     </div>
                   </div>
                 )}

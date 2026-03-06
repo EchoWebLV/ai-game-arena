@@ -1,8 +1,10 @@
 "use client";
 
+import { useState, useEffect, useRef, useCallback } from "react";
 import AIPlayerSeat from "./AIPlayerSeat";
 import PokerCard from "./PokerCard";
 import { AI_PLAYERS } from "@/lib/constants";
+import clsx from "clsx";
 
 interface PlayerData {
   chips: number;
@@ -30,15 +32,84 @@ interface PokerTableProps {
 }
 
 const SEAT_POSITIONS = [
-  { top: "12%", left: "50%" },    // top center
-  { top: "38%", left: "90%" },    // right top
-  { top: "80%", left: "78%" },    // right bottom
-  { top: "80%", left: "22%" },    // left bottom
-  { top: "38%", left: "10%" },    // left top
+  { top: "12%", left: "50%" },
+  { top: "38%", left: "90%" },
+  { top: "80%", left: "78%" },
+  { top: "80%", left: "22%" },
+  { top: "38%", left: "10%" },
 ];
+
+interface ChipAnim {
+  id: number;
+  seatIdx: number;
+  amount: number;
+}
+
+interface DealAnim {
+  id: number;
+  seatIdx: number;
+  slot: 0 | 1;
+  delayMs: number;
+}
 
 export default function PokerTable({ players, table }: PokerTableProps) {
   const visibleCommunity = table.communityCards.filter((c) => c !== 255);
+
+  const [chipAnims, setChipAnims] = useState<ChipAnim[]>([]);
+  const [dealAnims, setDealAnims] = useState<DealAnim[]>([]);
+  const [potPulse, setPotPulse] = useState(false);
+
+  const prevBetsRef = useRef<number[]>(Array(5).fill(0));
+  const prevCardsRef = useRef<[number, number][]>(
+    Array.from({ length: 5 }, () => [255, 255] as [number, number])
+  );
+  const prevPotRef = useRef(0);
+  const animIdRef = useRef(0);
+
+  useEffect(() => {
+    if (table.pot > prevPotRef.current && table.pot > 0) {
+      setPotPulse(true);
+      const t = setTimeout(() => setPotPulse(false), 450);
+      return () => clearTimeout(t);
+    }
+    prevPotRef.current = table.pot;
+  }, [table.pot]);
+
+  useEffect(() => {
+    const newChips: ChipAnim[] = [];
+    const newDeals: DealAnim[] = [];
+    let dealDelay = 0;
+
+    for (let i = 0; i < Math.min(players.length, 5); i++) {
+      const p = players[i];
+
+      if (p.currentBet > prevBetsRef.current[i] && p.currentBet > 0) {
+        newChips.push({ id: ++animIdRef.current, seatIdx: i, amount: p.currentBet });
+      }
+      prevBetsRef.current[i] = p.currentBet;
+
+      const prev = prevCardsRef.current[i];
+      if (prev[0] === 255 && p.holeCards[0] !== 255) {
+        newDeals.push({ id: ++animIdRef.current, seatIdx: i, slot: 0, delayMs: dealDelay });
+        dealDelay += 90;
+        newDeals.push({ id: ++animIdRef.current, seatIdx: i, slot: 1, delayMs: dealDelay });
+        dealDelay += 90;
+      }
+      prevCardsRef.current[i] = [p.holeCards[0], p.holeCards[1]];
+    }
+
+    if (newChips.length > 0) {
+      setChipAnims((prev) => [...prev, ...newChips]);
+      const ids = new Set(newChips.map((c) => c.id));
+      setTimeout(() => setChipAnims((prev) => prev.filter((a) => !ids.has(a.id))), 700);
+    }
+
+    if (newDeals.length > 0) {
+      setDealAnims((prev) => [...prev, ...newDeals]);
+      const ids = new Set(newDeals.map((d) => d.id));
+      setTimeout(() => setDealAnims((prev) => prev.filter((a) => !ids.has(a.id))), 900);
+    }
+  }, [players]);
 
   return (
     <div className="relative w-full aspect-[16/9.5] max-w-[820px] mx-auto">
@@ -55,7 +126,12 @@ export default function PokerTable({ players, table }: PokerTableProps) {
               <div className="text-[10px] uppercase tracking-[0.15em] text-green-200/50 font-medium">
                 Pot
               </div>
-              <div className="text-xl font-bold font-mono text-[var(--gold-light)] drop-shadow-lg">
+              <div
+                className={clsx(
+                  "text-xl font-bold font-mono text-[var(--gold-light)] drop-shadow-lg transition-transform",
+                  potPulse && "animate-pot-pulse"
+                )}
+              >
                 {table.pot.toLocaleString()}
               </div>
             </div>
@@ -110,6 +186,74 @@ export default function PokerTable({ players, table }: PokerTableProps) {
           lastAction={player.lastAction}
           position={SEAT_POSITIONS[idx]}
         />
+      ))}
+
+      {/* ── Flying chip animations ── */}
+      {chipAnims.map((anim) => (
+        <div
+          key={anim.id}
+          className="absolute z-30 pointer-events-none animate-fly-chip"
+          style={
+            {
+              "--from-x": SEAT_POSITIONS[anim.seatIdx].left,
+              "--from-y": SEAT_POSITIONS[anim.seatIdx].top,
+            } as React.CSSProperties
+          }
+        >
+          <div className="relative" style={{ width: 24, height: 28 }}>
+            {Array.from({ length: Math.min(3, Math.ceil(anim.amount / 200)) }).map((_, j) => (
+              <div
+                key={j}
+                className="absolute left-0 rounded-full"
+                style={{
+                  width: 22,
+                  height: 22,
+                  top: -j * 3,
+                  background: "linear-gradient(145deg, #e2c97e 0%, #c9a84c 50%, #8a6d2b 100%)",
+                  border: "2px solid #e2c97e",
+                  boxShadow:
+                    "0 1px 4px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.3)",
+                }}
+              >
+                <div
+                  className="absolute rounded-full border border-dashed"
+                  style={{
+                    inset: 3,
+                    borderColor: "rgba(255,255,255,0.35)",
+                  }}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+
+      {/* ── Card dealing animations ── */}
+      {dealAnims.map((anim) => (
+        <div
+          key={anim.id}
+          className="absolute z-30 pointer-events-none animate-deal-card"
+          style={
+            {
+              "--to-x": SEAT_POSITIONS[anim.seatIdx].left,
+              "--to-y": SEAT_POSITIONS[anim.seatIdx].top,
+              animationDelay: `${anim.delayMs}ms`,
+            } as React.CSSProperties
+          }
+        >
+          <div className="poker-card-back rounded-md" style={{ width: 32, height: 44 }}>
+            <div className="w-full h-full flex items-center justify-center">
+              <div
+                className="rounded-sm border"
+                style={{
+                  width: "70%",
+                  height: "75%",
+                  borderColor: "rgba(74, 122, 181, 0.3)",
+                }}
+              />
+            </div>
+          </div>
+        </div>
       ))}
     </div>
   );

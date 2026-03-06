@@ -10,6 +10,7 @@ import * as path from "path";
 import {
   GameContext,
   PokerDecision,
+  ActionRecord,
   fallbackDecision,
 } from "./agents/base";
 import {
@@ -303,6 +304,7 @@ async function runOnChainTournament() {
 async function playOnChainHand(tid: number, handNum: number) {
   const pc = pokerClient!;
   const pdas = pc.getAllPdas(tid);
+  const handHistory: ActionRecord[] = [];
 
   // start_hand with randomness
   const randomness = PokerClient.generateRandomness();
@@ -331,26 +333,60 @@ async function playOnChainHand(tid: number, handNum: number) {
   const roundNames = ["preflop", "flop", "turn", "river"];
 
   for (let roundIdx = 0; roundIdx < 4; roundIdx++) {
+    // Check if hand is already decided (only 1 non-folded player)
+    const gsCheck = await pc.fetchGameState(pdas.gameStatePda);
+    if (gsCheck.numActiveInHand <= 1) {
+      console.log(`  (hand decided — skipping to showdown)`);
+      break;
+    }
+
     if (roundIdx > 0) {
       txLog("advance_round", await pc.advanceRound(tid));
     }
 
     await syncOnChainState(tid, handNum);
     broadcast({ type: "round_update", round: roundNames[roundIdx], handState: currentHand, tournament });
+    console.log(`  [${roundNames[roundIdx].toUpperCase()}]`);
     await delay(ACTION_DELAY_MS);
 
+    // Check if all remaining players are all-in (run it out, no betting)
+    let allAreAllIn = true;
+    let canActCount = 0;
+    for (let i = 0; i < NUM_AGENTS; i++) {
+      if (tournament.active[i]) {
+        try {
+          const ps = await pc.fetchPlayerState(pdas.playerPdas[i]);
+          if (!ps.isFolded && !ps.isAllIn) canActCount++;
+        } catch {}
+      }
+    }
+    if (canActCount <= 1) {
+      console.log(`  (no betting — ${canActCount === 0 ? "all-in runout" : "only 1 can act"})`);
+      await delay(ACTION_DELAY_MS * 2);
+      continue;
+    }
+
     // Player actions
-    for (let a = 0; a < 15; a++) {
+    let prevTurn = -1;
+    let actionsThisRound = 0;
+    for (let a = 0; a < 25; a++) {
       const gameState = await pc.fetchGameState(pdas.gameStatePda);
       const currentTurn = gameState.currentTurn;
 
-      if (!tournament.active[currentTurn]) break;
+      if (currentTurn === prevTurn) {
+        if (actionsThisRound > 0) break;
+        await delay(200);
+        continue;
+      }
+      prevTurn = currentTurn;
+
+      if (!tournament.active[currentTurn]) continue;
 
       const playerState = await pc.fetchPlayerState(pdas.playerPdas[currentTurn]);
-      if (playerState.isFolded || playerState.isAllIn) break;
+      if (playerState.isFolded || playerState.isAllIn) continue;
 
-      // Ask AI for decision
-      const ctx = await buildContextFromChain(tid, currentTurn);
+      // Ask AI for decision (with action history, no opponent cards)
+      const ctx = await buildContextFromChain(tid, currentTurn, handHistory);
       const decision = await makeDecision(currentTurn, ctx);
 
       const actionType = pc.actionToNumber(decision.action);
@@ -360,6 +396,15 @@ async function playOnChainHand(tid: number, handNum: number) {
         `action_${AI_NAMES[currentTurn]}`,
         await pc.playerAction(tid, currentTurn, actionType, raiseAmt)
       );
+      actionsThisRound++;
+
+      handHistory.push({
+        player_idx: currentTurn,
+        ai_model: AI_NAMES[currentTurn],
+        round: roundNames[roundIdx],
+        action: decision.action,
+        amount: raiseAmt || undefined,
+      });
 
       console.log(`  ${AI_NAMES[currentTurn]}: ${decision.action}${raiseAmt ? ` ${raiseAmt}` : ""} — "${decision.reasoning?.slice(0, 80)}"`);
 
@@ -383,7 +428,7 @@ async function playOnChainHand(tid: number, handNum: number) {
 
       await delay(ACTION_DELAY_MS);
 
-      // Check if round is over
+      // Check if round/hand is over
       const updatedGame = await pc.fetchGameState(pdas.gameStatePda);
       if (updatedGame.numActiveInHand <= 1) break;
     }
@@ -463,7 +508,7 @@ async function syncOnChainState(tid: number, handNum: number) {
   }
 }
 
-async function buildContextFromChain(tid: number, playerIdx: number): Promise<GameContext> {
+async function buildContextFromChain(tid: number, playerIdx: number, actionHistory: ActionRecord[] = []): Promise<GameContext> {
   const pc = pokerClient!;
   const pdas = pc.getAllPdas(tid);
 
@@ -507,6 +552,7 @@ async function buildContextFromChain(tid: number, playerIdx: number): Promise<Ga
     big_blind: BIG_BLIND,
     last_raise: gs.lastRaise?.toNumber?.() ?? BIG_BLIND,
     position,
+    action_history: actionHistory,
   };
 }
 
@@ -582,6 +628,8 @@ async function playOffChainHand(handNum: number) {
     })),
   };
 
+  const handHistory: ActionRecord[] = [];
+
   broadcast({ type: "hand_start", hand: handNum, dealer: dealerIdx, handState: currentHand, tournament });
   console.log(`── Hand #${handNum} | Dealer: ${AI_NAMES[dealerIdx]} ──`);
   await delay(ACTION_DELAY_MS);
@@ -593,10 +641,20 @@ async function playOffChainHand(handNum: number) {
     { name: "river", cards: [...flop, turnCard, riverCard] },
   ];
 
+  let handOver = false;
+
   for (const round of rounds) {
+    if (handOver) break;
+
+    // Check if only 1 non-folded player remains — hand is over
+    const nonFolded = tournament.active.map((v, i) => (v && !folded[i] ? i : -1)).filter((i) => i >= 0);
+    if (nonFolded.length <= 1) break;
+
+    // Reset per-round bets
     for (let i = 0; i < 5; i++) bets[i] = 0;
     let lastRaise = round.name === "preflop" ? BIG_BLIND : 0;
 
+    // Show community cards for this round
     const visibleCards = [...round.cards, ...Array(5 - round.cards.length).fill(255)];
     currentHand.communityCards = visibleCards;
     currentHand.currentRound = round.name;
@@ -604,16 +662,38 @@ async function playOffChainHand(handNum: number) {
     updateHandPlayers(chips, bets, folded, allIn, holeCards);
 
     broadcast({ type: "round_update", round: round.name, handState: currentHand, tournament });
+    console.log(`  [${round.name.toUpperCase()}] Community: ${round.cards.length > 0 ? round.cards.join(", ") : "—"}`);
     await delay(ACTION_DELAY_MS);
 
+    // Determine who can act this round (active, not folded, not all-in)
+    const canActList: number[] = [];
     const startIdx = round.name === "preflop" ? (bbIdx + 1) % 5 : (dealerIdx + 1) % 5;
-
-    for (let a = 0; a < 15; a++) {
+    for (let a = 0; a < 5; a++) {
       const pIdx = (startIdx + a) % 5;
-      if (!tournament.active[pIdx] || folded[pIdx] || allIn[pIdx]) continue;
+      if (tournament.active[pIdx] && !folded[pIdx] && !allIn[pIdx]) {
+        canActList.push(pIdx);
+      }
+    }
 
-      const activePlaying = tournament.active.filter((v, i) => v && !folded[i]);
-      if (activePlaying.length <= 1) break;
+    // If 0-1 players can act, no betting this round (run it out)
+    if (canActList.length <= 1) {
+      console.log(`  (no betting — ${canActList.length === 0 ? "all-in showdown" : "only 1 player can act"})`);
+      await delay(ACTION_DELAY_MS * 2);
+      continue;
+    }
+
+    // Betting loop: track who still needs to act
+    const needsToAct = new Set<number>(canActList);
+    let loopPos = 0;
+    let safety = 0;
+
+    while (needsToAct.size > 0 && safety < 25) {
+      safety++;
+      const pIdx = canActList[loopPos % canActList.length];
+      loopPos++;
+
+      if (folded[pIdx] || allIn[pIdx] || !needsToAct.has(pIdx)) continue;
+      needsToAct.delete(pIdx);
 
       currentHand.currentTurn = pIdx;
       broadcast({ type: "turn_update", playerIdx: pIdx, handState: currentHand, tournament });
@@ -638,6 +718,7 @@ async function playOffChainHand(handNum: number) {
           big_blind: BIG_BLIND,
           last_raise: lastRaise,
           position: pIdx === dealerIdx ? "dealer" : pIdx === sbIdx ? "small_blind" : "big_blind",
+          action_history: handHistory,
         };
 
         const decision = await makeDecision(pIdx, ctx);
@@ -653,12 +734,15 @@ async function playOffChainHand(handNum: number) {
           community_cards: round.cards, my_hole_cards: holeCards[pIdx],
           my_chips: chips[pIdx], my_current_bet: bets[pIdx],
           opponents: [], small_blind: SMALL_BLIND, big_blind: BIG_BLIND,
-          last_raise: lastRaise, position: "early",
+          last_raise: lastRaise, position: "early", action_history: handHistory,
         });
         action = fb.action;
         raiseAmt = fb.raise_amount || 0;
         reasoning = fb.reasoning || "";
       }
+
+      // Validate: can't check when there's a bet to call
+      if (action === "check" && callCost > 0) action = "call";
 
       switch (action) {
         case "fold":
@@ -675,12 +759,18 @@ async function playOffChainHand(handNum: number) {
           break;
         }
         case "raise": {
-          const amt = Math.min(raiseAmt || lastRaise * 2, chips[pIdx]);
+          const total = Math.min(raiseAmt || lastRaise * 2, chips[pIdx] + bets[pIdx]);
+          const additional = Math.max(0, total - bets[pIdx]);
+          const amt = Math.min(additional, chips[pIdx]);
           chips[pIdx] -= amt;
           bets[pIdx] += amt;
           pot += amt;
-          lastRaise = bets[pIdx];
+          if (bets[pIdx] > lastRaise) lastRaise = bets[pIdx];
           if (chips[pIdx] === 0) allIn[pIdx] = true;
+          // Re-open action: everyone else who can still act must respond
+          for (const p of canActList) {
+            if (p !== pIdx && !folded[p] && !allIn[p]) needsToAct.add(p);
+          }
           break;
         }
         case "all_in": {
@@ -689,10 +779,24 @@ async function playOffChainHand(handNum: number) {
           bets[pIdx] += amt;
           chips[pIdx] = 0;
           allIn[pIdx] = true;
-          if (bets[pIdx] > lastRaise) lastRaise = bets[pIdx];
+          if (bets[pIdx] > lastRaise) {
+            lastRaise = bets[pIdx];
+            // Re-open action for an all-in raise
+            for (const p of canActList) {
+              if (p !== pIdx && !folded[p] && !allIn[p]) needsToAct.add(p);
+            }
+          }
           break;
         }
       }
+
+      handHistory.push({
+        player_idx: pIdx,
+        ai_model: AI_NAMES[pIdx],
+        round: round.name,
+        action,
+        amount: raiseAmt || undefined,
+      });
 
       currentHand.pot = pot;
       updateHandPlayers(chips, bets, folded, allIn, holeCards, pIdx, action);
@@ -713,9 +817,11 @@ async function playOffChainHand(handNum: number) {
         } : { route: "Off-chain simulation" },
       });
 
-      const stillPlaying = tournament.active.filter((v, i) => v && !folded[i] && !allIn[i]);
-      if (stillPlaying.length <= 1) break;
-      if (a >= tournament.active.filter((v, i) => v && !folded[i]).length - 1) break;
+      // Check if hand is over (everyone folded but one)
+      const remaining = tournament.active.filter((v, i) => v && !folded[i]);
+      if (remaining.length <= 1) { handOver = true; break; }
+
+      await delay(ACTION_DELAY_MS);
     }
   }
 
