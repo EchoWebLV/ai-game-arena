@@ -1146,6 +1146,65 @@ app.get("/state", (_req, res) => {
   res.json({ tournament, hand: currentHand });
 });
 
+// ─── ElevenLabs TTS proxy ─────────────────────────────────────────────────────
+
+const ELEVENLABS_VOICE_IDS = [
+  "pNInz6obpgDQGcFmaJgB", // GPT-5.4 → Adam
+  "ErXwobaYiN019PkySvjV", // Claude Sonnet 4.6 → Antoni
+  "TxGEqnHWrfWFTfGW9XjX", // Gemini 3.1 Pro → Josh
+  "VR6AewLTigWG4xSOukaG", // Llama 4 Scout → Arnold
+  "yoZ06aMxZJJ28mfd3POQ", // Grok 3 → Sam
+];
+
+app.options("/api/tts", (_req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.sendStatus(204);
+});
+
+app.post("/api/tts", async (req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  const apiKey = process.env.ELEVENLABS_API_KEY;
+  if (!apiKey) return res.status(503).json({ error: "ELEVENLABS_API_KEY not set" });
+
+  const { text, voiceIdx } = req.body ?? {};
+  if (!text || typeof text !== "string") return res.status(400).json({ error: "text required" });
+  const idx = typeof voiceIdx === "number" ? Math.min(Math.max(voiceIdx, 0), 4) : 0;
+  const voiceId = ELEVENLABS_VOICE_IDS[idx];
+
+  try {
+    const elRes = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream`, {
+      method: "POST",
+      headers: {
+        "xi-api-key": apiKey,
+        "Content-Type": "application/json",
+        Accept: "audio/mpeg",
+      },
+      body: JSON.stringify({
+        text: text.slice(0, 200),
+        model_id: "eleven_flash_v2_5",
+        voice_settings: { stability: 0.5, similarity_boost: 0.75 },
+        optimize_streaming_latency: 4,
+      }),
+    });
+
+    if (!elRes.ok) {
+      const err = await elRes.text();
+      console.warn("[TTS] ElevenLabs error:", elRes.status, err.slice(0, 200));
+      return res.status(elRes.status).json({ error: "ElevenLabs API error" });
+    }
+
+    res.setHeader("Content-Type", "audio/mpeg");
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    const arrayBuf = await elRes.arrayBuffer();
+    res.send(Buffer.from(arrayBuf));
+  } catch (err: any) {
+    console.error("[TTS] Error:", err.message?.slice(0, 120));
+    res.status(500).json({ error: "TTS generation failed" });
+  }
+});
+
 // ─── Start ────────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -1157,6 +1216,7 @@ async function main() {
     console.log(`  MagicBlock:   ${ER_RPC}`);
     console.log(`  On-chain:     ${pokerClient ? "YES" : "NO (deploy program + set ON_CHAIN=true)"}`);
     console.log(`  OpenRouter:   ${process.env.OPENROUTER_API_KEY ? "YES" : "NO (set OPENROUTER_API_KEY)"}`);
+    console.log(`  ElevenLabs:   ${process.env.ELEVENLABS_API_KEY ? "YES (TTS enabled)" : "NO (set ELEVENLABS_API_KEY for AI voices)"}`);
     console.log(`  Agents:       ${AI_NAMES.join(", ")}\n`);
 
     setTimeout(() => runTournament(), 3000);

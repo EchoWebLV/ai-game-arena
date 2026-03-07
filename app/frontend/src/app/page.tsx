@@ -6,9 +6,11 @@ import PokerTable from "@/components/PokerTable";
 import PredictionMarket from "@/components/PredictionMarket";
 import TournamentLog, { LogEntry } from "@/components/TournamentLog";
 import TransactionFeed, { TxEntry } from "@/components/TransactionFeed";
+import TableChat from "@/components/TableChat";
 import { AI_PLAYERS, BACKEND_URL } from "@/lib/constants";
 import AIAvatar from "@/components/AIAvatar";
-import { Zap, Shield, Dice5, Layers, Wifi, WifiOff, Trophy, RotateCcw } from "lucide-react";
+import { Zap, Shield, Dice5, Layers, Wifi, WifiOff, Trophy, RotateCcw, Volume2, VolumeX } from "lucide-react";
+import { useAIVoice } from "@/hooks/useAIVoice";
 import clsx from "clsx";
 
 const WalletNavButton = dynamic(() => import("@/components/WalletButton"), { ssr: false });
@@ -67,6 +69,8 @@ export default function Home() {
     totalPool: 0, betsPerAi: [0,0,0,0,0], isOpen: true, isResolved: false, winningAi: null as number | null,
   });
   const [userBets, setUserBets] = useState<{ aiIdx: number; amount: number }[]>([]);
+
+  const { muted, toggleMute } = useAIVoice(logs);
 
   const wsRef = useRef<WebSocket | null>(null);
 
@@ -275,6 +279,18 @@ export default function Home() {
               <Layers size={10} className="text-purple-400" />
               <span>BOLT ECS</span>
             </div>
+            <button
+              onClick={toggleMute}
+              title={muted ? "Unmute AI voices" : "Mute AI voices"}
+              className={clsx(
+                "flex items-center justify-center w-8 h-8 rounded-lg border transition-colors",
+                muted
+                  ? "border-white/10 text-[var(--text-muted)] hover:text-white/60"
+                  : "border-[var(--gold)]/30 text-[var(--gold)] hover:bg-[var(--gold)]/10"
+              )}
+            >
+              {muted ? <VolumeX size={14} /> : <Volume2 size={14} />}
+            </button>
             <WalletNavButton style={{ height: 32, fontSize: 11, borderRadius: 8, padding: "0 12px", background: "linear-gradient(135deg, #c41e3a, #8b1528)" }} />
           </div>
         </div>
@@ -318,9 +334,12 @@ export default function Home() {
           </div>
         )}
 
-        {/* Poker Table — full width hero */}
-        <div className="bg-[var(--bg-card)] rounded-2xl border border-white/[0.04] p-5 mb-5 overflow-hidden">
+        {/* Poker Table — full width hero with chat overlay */}
+        <div className="relative bg-[var(--bg-card)] rounded-2xl border border-white/[0.04] p-5 mb-5 overflow-hidden">
           <PokerTable players={players} table={table} />
+          <div className="absolute top-3 right-3 w-[280px] max-h-[calc(100%-24px)] pointer-events-auto opacity-80 hover:opacity-100 transition-opacity">
+            <TableChat logs={logs} />
+          </div>
         </div>
 
         {/* On-chain info bar */}
