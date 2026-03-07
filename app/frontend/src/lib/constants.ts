@@ -1,9 +1,9 @@
 export const AI_PLAYERS = [
   {
     idx: 0,
-    name: "GPT-5.2",
+    name: "GPT-5.4",
     shortName: "GPT",
-    model: "openai/gpt-5.2-chat",
+    model: "openai/gpt-5.4",
     color: "#10b981",
     avatar: "/ai-logos/openai.svg",
   },
@@ -25,9 +25,9 @@ export const AI_PLAYERS = [
   },
   {
     idx: 3,
-    name: "Llama 3.1 70B",
+    name: "Llama 4 Scout",
     shortName: "Llama",
-    model: "meta-llama/llama-3.1-70b-instruct",
+    model: "meta-llama/llama-4-scout",
     color: "#a855f7",
     avatar: "/ai-logos/meta.svg",
   },

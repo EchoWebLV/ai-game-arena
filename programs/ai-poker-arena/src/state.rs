@@ -45,11 +45,29 @@ pub struct GameState {
     pub last_raiser: u8,
     pub status: u8,
     pub bump: u8,
+    pub player_folded: [bool; MAX_PLAYERS],
+    pub player_all_in: [bool; MAX_PLAYERS],
+    pub player_active: [bool; MAX_PLAYERS],
 }
 
 impl GameState {
     pub const LEN: usize = 32 + 8 + DECK_SIZE + 1 + COMMUNITY_CARDS
-        + 8 + 1 + 1 + 1 + 8 + 8 + 8 + 1 + 1 + 1 + 1 + 1;
+        + 8 + 1 + 1 + 1 + 8 + 8 + 8 + 1 + 1 + 1 + 1 + 1
+        + MAX_PLAYERS + MAX_PLAYERS + MAX_PLAYERS;
+
+    pub fn next_active_turn(&self, after: u8) -> u8 {
+        let n = MAX_PLAYERS as u8;
+        for i in 1..=n {
+            let idx = (after + i) % n;
+            if self.player_active[idx as usize]
+                && !self.player_folded[idx as usize]
+                && !self.player_all_in[idx as usize]
+            {
+                return idx;
+            }
+        }
+        after
+    }
 }
 
 #[account]

@@ -192,6 +192,9 @@ pub mod ai_poker_arena {
 
         let mut active_count = 0u8;
         for i in 0..MAX_PLAYERS {
+            game.player_active[i] = tournament.player_active[i];
+            game.player_folded[i] = !tournament.player_active[i];
+            game.player_all_in[i] = false;
             if tournament.player_active[i] {
                 active_count += 1;
             }
@@ -260,14 +263,16 @@ pub mod ai_poker_arena {
 
         if sb_player.chips == 0 {
             sb_player.is_all_in = true;
+            game.player_all_in[sb_player.player_idx as usize] = true;
         }
         if bb_player.chips == 0 {
             bb_player.is_all_in = true;
+            game.player_all_in[bb_player.player_idx as usize] = true;
         }
 
-        // First to act is the player after big blind
+        // First to act is the first non-folded, non-all-in player after BB
         let bb_idx = bb_player.player_idx;
-        game.current_turn = (bb_idx + 1) % MAX_PLAYERS as u8;
+        game.current_turn = game.next_active_turn(bb_idx);
         game.num_acted_this_round = 0;
         game.last_raiser = bb_idx;
 
@@ -301,9 +306,12 @@ pub mod ai_poker_arena {
 
         let call_amount = game.last_raise.saturating_sub(player.current_bet);
 
+        let pidx = player.player_idx as usize;
+
         match action_type {
             ACTION_FOLD => {
                 player.is_folded = true;
+                game.player_folded[pidx] = true;
                 game.num_active_in_hand -= 1;
                 msg!("AI #{} folds", player.player_idx);
             }
@@ -319,6 +327,7 @@ pub mod ai_poker_arena {
                 game.pot += amount;
                 if player.chips == 0 {
                     player.is_all_in = true;
+                    game.player_all_in[pidx] = true;
                 }
                 msg!("AI #{} calls {}", player.player_idx, amount);
             }
@@ -334,6 +343,7 @@ pub mod ai_poker_arena {
                 game.num_acted_this_round = 0;
                 if player.chips == 0 {
                     player.is_all_in = true;
+                    game.player_all_in[pidx] = true;
                 }
                 msg!("AI #{} raises to {}", player.player_idx, player.current_bet);
             }
@@ -344,6 +354,7 @@ pub mod ai_poker_arena {
                 player.total_bet_this_hand += amount;
                 player.chips = 0;
                 player.is_all_in = true;
+                game.player_all_in[pidx] = true;
                 if player.current_bet > game.last_raise {
                     game.last_raise = player.current_bet;
                     game.last_raiser = player.player_idx;
@@ -357,8 +368,7 @@ pub mod ai_poker_arena {
         player.has_acted = true;
         game.num_acted_this_round += 1;
 
-        // Advance to next active (not folded, not all-in) player
-        game.current_turn = (player.player_idx + 1) % MAX_PLAYERS as u8;
+        game.current_turn = game.next_active_turn(player.player_idx);
 
         msg!("Next turn: AI #{}", game.current_turn);
         Ok(())
@@ -409,9 +419,10 @@ pub mod ai_poker_arena {
         game.num_acted_this_round = 0;
         game.last_raiser = MAX_PLAYERS as u8;
 
-        // Set turn to first active player after dealer
-        game.current_turn = (game.dealer_idx + 1) % MAX_PLAYERS as u8;
+        // Set turn to first non-folded, non-all-in player after dealer
+        game.current_turn = game.next_active_turn(game.dealer_idx);
 
+        msg!("Round advanced. First to act: AI #{}", game.current_turn);
         Ok(())
     }
 
@@ -433,14 +444,19 @@ pub mod ai_poker_arena {
         ];
 
         let mut best_score: u32 = 0;
-        let mut winner_idx: u8 = 0;
+        let mut winner_idx: u8 = MAX_PLAYERS as u8;
         let mut active_non_folded = 0u8;
 
         for (i, player) in players.iter().enumerate() {
-            if !player.is_active || player.is_folded {
+            let is_folded = player.is_folded || game.player_folded[i];
+            if !player.is_active || is_folded {
                 continue;
             }
             active_non_folded += 1;
+
+            if winner_idx == MAX_PLAYERS as u8 {
+                winner_idx = i as u8;
+            }
 
             if player.hole_card_1 == CARD_NOT_DEALT {
                 continue;
@@ -460,7 +476,18 @@ pub mod ai_poker_arena {
         // If only 1 player left (everyone else folded), they win
         if active_non_folded == 1 {
             for (i, player) in players.iter().enumerate() {
-                if player.is_active && !player.is_folded {
+                let is_folded = player.is_folded || game.player_folded[i];
+                if player.is_active && !is_folded {
+                    winner_idx = i as u8;
+                    break;
+                }
+            }
+        }
+
+        // Safety: if no winner found, default to first active player
+        if winner_idx == MAX_PLAYERS as u8 {
+            for i in 0..MAX_PLAYERS {
+                if tournament.player_active[i] {
                     winner_idx = i as u8;
                     break;
                 }
