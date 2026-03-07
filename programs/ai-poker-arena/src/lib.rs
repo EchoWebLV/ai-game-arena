@@ -2,6 +2,9 @@ use anchor_lang::prelude::*;
 use ephemeral_rollups_sdk::anchor::{commit, delegate, ephemeral};
 use ephemeral_rollups_sdk::cpi::DelegateConfig;
 use ephemeral_rollups_sdk::ephem::{commit_accounts, commit_and_undelegate_accounts};
+use ephemeral_vrf_sdk::anchor::vrf;
+use ephemeral_vrf_sdk::instructions::{create_request_randomness_ix, RequestRandomnessParams};
+use ephemeral_vrf_sdk::types::SerializableAccountMeta;
 
 pub mod constants;
 pub mod errors;
@@ -205,6 +208,82 @@ pub mod ai_poker_arena {
 
         msg!(
             "Hand #{} started. Dealer: AI #{}. {} players active.",
+            game.hand_number,
+            game.dealer_idx,
+            active_count
+        );
+        Ok(())
+    }
+
+    /// Request VRF randomness to start a new hand (provably fair shuffle).
+    /// The VRF oracle will call back `callback_start_hand` with verified randomness.
+    pub fn request_start_hand(ctx: Context<RequestStartHand>, client_seed: u8) -> Result<()> {
+        let ix = create_request_randomness_ix(RequestRandomnessParams {
+            payer: ctx.accounts.authority.key(),
+            oracle_queue: ctx.accounts.oracle_queue.key(),
+            callback_program_id: ID,
+            callback_discriminator: instruction::CallbackStartHand::DISCRIMINATOR.to_vec(),
+            caller_seed: [client_seed; 32],
+            accounts_metas: Some(vec![
+                SerializableAccountMeta {
+                    pubkey: ctx.accounts.game_state.key(),
+                    is_signer: false,
+                    is_writable: true,
+                },
+                SerializableAccountMeta {
+                    pubkey: ctx.accounts.tournament.key(),
+                    is_signer: false,
+                    is_writable: false,
+                },
+            ]),
+            ..Default::default()
+        });
+        ctx.accounts
+            .invoke_signed_vrf(&ctx.accounts.authority.to_account_info(), &ix)?;
+        msg!("VRF randomness requested for next hand");
+        Ok(())
+    }
+
+    /// VRF callback: receives verified randomness and starts the hand.
+    /// Only callable by the VRF oracle program (enforced by vrf_program_identity signer).
+    pub fn callback_start_hand(
+        ctx: Context<CallbackStartHand>,
+        randomness: [u8; 32],
+    ) -> Result<()> {
+        let game = &mut ctx.accounts.game_state;
+        let tournament = &ctx.accounts.tournament;
+
+        require!(
+            tournament.status == STATUS_ACTIVE || tournament.status == STATUS_WAITING,
+            PokerError::TournamentComplete
+        );
+
+        game.deck = poker::shuffle_deck(&randomness);
+        game.deck_index = 0;
+        game.community_cards = [CARD_NOT_DEALT; COMMUNITY_CARDS];
+        game.pot = 0;
+        game.current_round = ROUND_PREFLOP;
+        game.hand_number += 1;
+        game.last_raise = game.big_blind;
+        game.num_acted_this_round = 0;
+        game.last_raiser = MAX_PLAYERS as u8;
+        game.status = STATUS_ACTIVE;
+
+        let mut active_count = 0u8;
+        for i in 0..MAX_PLAYERS {
+            game.player_active[i] = tournament.player_active[i];
+            game.player_folded[i] = !tournament.player_active[i];
+            game.player_all_in[i] = false;
+            if tournament.player_active[i] {
+                active_count += 1;
+            }
+        }
+        game.num_active_in_hand = active_count;
+
+        game.dealer_idx = ((game.hand_number - 1) % MAX_PLAYERS as u64) as u8;
+
+        msg!(
+            "Hand #{} started via VRF. Dealer: AI #{}. {} players active.",
             game.hand_number,
             game.dealer_idx,
             active_count
@@ -840,6 +919,37 @@ pub struct StartHand<'info> {
         constraint = game_state.tournament == tournament.key()
     )]
     pub game_state: Account<'info, GameState>,
+}
+
+#[vrf]
+#[derive(Accounts)]
+pub struct RequestStartHand<'info> {
+    #[account(mut)]
+    pub authority: Signer<'info>,
+
+    pub tournament: Account<'info, TournamentState>,
+
+    #[account(
+        mut,
+        constraint = game_state.tournament == tournament.key()
+    )]
+    pub game_state: Account<'info, GameState>,
+
+    /// CHECK: Oracle queue for VRF randomness
+    #[account(mut, address = ephemeral_vrf_sdk::consts::DEFAULT_QUEUE)]
+    pub oracle_queue: AccountInfo<'info>,
+}
+
+#[derive(Accounts)]
+pub struct CallbackStartHand<'info> {
+    /// VRF program identity PDA — ensures only the VRF oracle can invoke this callback
+    #[account(address = ephemeral_vrf_sdk::consts::VRF_PROGRAM_IDENTITY)]
+    pub vrf_program_identity: Signer<'info>,
+
+    #[account(mut)]
+    pub game_state: Account<'info, GameState>,
+
+    pub tournament: Account<'info, TournamentState>,
 }
 
 #[derive(Accounts)]

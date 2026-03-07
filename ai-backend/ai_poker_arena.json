@@ -36,6 +36,51 @@
       "args": []
     },
     {
+      "name": "callback_start_hand",
+      "docs": [
+        "VRF callback: receives verified randomness and starts the hand.",
+        "Only callable by the VRF oracle program (enforced by vrf_program_identity signer)."
+      ],
+      "discriminator": [
+        176,
+        253,
+        36,
+        10,
+        188,
+        126,
+        48,
+        124
+      ],
+      "accounts": [
+        {
+          "name": "vrf_program_identity",
+          "docs": [
+            "VRF program identity PDA — ensures only the VRF oracle can invoke this callback"
+          ],
+          "signer": true,
+          "address": "9irBy75QS2BN81FUgXuHcjqceJJRuc9oDkAe8TKVvvAw"
+        },
+        {
+          "name": "game_state",
+          "writable": true
+        },
+        {
+          "name": "tournament"
+        }
+      ],
+      "args": [
+        {
+          "name": "randomness",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    },
+    {
       "name": "claim_winnings",
       "docs": [
         "Claim prediction market winnings."
@@ -1322,6 +1367,80 @@
       ]
     },
     {
+      "name": "request_start_hand",
+      "docs": [
+        "Request VRF randomness to start a new hand (provably fair shuffle).",
+        "The VRF oracle will call back `callback_start_hand` with verified randomness."
+      ],
+      "discriminator": [
+        39,
+        84,
+        244,
+        47,
+        95,
+        162,
+        237,
+        93
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "tournament"
+        },
+        {
+          "name": "game_state",
+          "writable": true
+        },
+        {
+          "name": "oracle_queue",
+          "writable": true,
+          "address": "Cuj97ggrhhidhbu39TijNVqE74xvKJ69gDervRUXAxGh"
+        },
+        {
+          "name": "program_identity",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  105,
+                  100,
+                  101,
+                  110,
+                  116,
+                  105,
+                  116,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "vrf_program",
+          "address": "Vrf1RNUjXmQGjmQrQLvJHs9SNkvDJEsRVFPkfSQUwGz"
+        },
+        {
+          "name": "slot_hashes",
+          "address": "SysvarS1otHashes111111111111111111111111111"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "client_seed",
+          "type": "u8"
+        }
+      ]
+    },
+    {
       "name": "resolve_market",
       "docs": [
         "Resolve the prediction market after tournament ends."
@@ -1770,6 +1889,33 @@
           {
             "name": "bump",
             "type": "u8"
+          },
+          {
+            "name": "player_folded",
+            "type": {
+              "array": [
+                "bool",
+                5
+              ]
+            }
+          },
+          {
+            "name": "player_all_in",
+            "type": {
+              "array": [
+                "bool",
+                5
+              ]
+            }
+          },
+          {
+            "name": "player_active",
+            "type": {
+              "array": [
+                "bool",
+                5
+              ]
+            }
           }
         ]
       }

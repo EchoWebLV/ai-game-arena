@@ -1,5 +1,6 @@
 import * as anchor from "@coral-xyz/anchor";
 import { Connection, PublicKey, Keypair } from "@solana/web3.js";
+import * as crypto from "crypto";
 
 const PROGRAM_ID = new PublicKey("BJSCnCFb475uHPTi6Lee2E5SU2GToyRQEgqHJUbsN5ob");
 const TOURNAMENT_SEED = Buffer.from("tournament");
@@ -9,6 +10,9 @@ const MARKET_SEED = Buffer.from("market");
 const MAX_PLAYERS = 5;
 
 const ER_VALIDATOR = new PublicKey("MUS3hc9TCw4cGC12vHNoYcCGzJG1txjgQLZWVoeNHNd");
+
+const VRF_ORACLE_QUEUE = new PublicKey("Cuj97ggrhhidhbu39TijNVqE74xvKJ69gDervRUXAxGh");
+const VRF_PROGRAM = new PublicKey("Vrf1RNUjXmQGjmQrQLvJHs9SNkvDJEsRVFPkfSQUwGz");
 
 export class PokerClient {
   connection: Connection;
@@ -307,6 +311,43 @@ export class PokerClient {
       .rpc();
   }
 
+  // ── VRF-based hand start ────────────────────────────────────────────────
+
+  async requestStartHandVrf(tid: number, clientSeed: number): Promise<string> {
+    const { tournamentPda, gameStatePda } = this.getAllPdas(tid);
+    const [programIdentity] = PublicKey.findProgramAddressSync(
+      [Buffer.from("identity")],
+      PROGRAM_ID
+    );
+    const accs = {
+      authority: this.wallet.publicKey,
+      tournament: tournamentPda,
+      gameState: gameStatePda,
+      oracleQueue: VRF_ORACLE_QUEUE,
+      programIdentity,
+      vrfProgram: VRF_PROGRAM,
+      slotHashes: new PublicKey("SysvarS1otHashes111111111111111111111111111"),
+      systemProgram: anchor.web3.SystemProgram.programId,
+    };
+    return this.erWithFallback("requestStartHandVrf",
+      () => this.erProgram.methods.requestStartHand(clientSeed).accounts(accs).rpc(),
+      () => this.program.methods.requestStartHand(clientSeed).accounts(accs).rpc()
+    );
+  }
+
+  async waitForVrfCallback(gameStatePda: PublicKey, expectedHandNumber: number, timeoutMs = 10000): Promise<void> {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      try {
+        const game = await this.fetchGameState(gameStatePda);
+        const hn = game.handNumber?.toNumber?.() ?? game.handNumber ?? 0;
+        if (hn >= expectedHandNumber) return;
+      } catch {}
+      await new Promise(r => setTimeout(r, 500));
+    }
+    throw new Error(`VRF callback timeout after ${timeoutMs}ms`);
+  }
+
   // ── Helpers ─────────────────────────────────────────────────────────────
 
   actionToNumber(action: string): number {
@@ -314,8 +355,6 @@ export class PokerClient {
   }
 
   static generateRandomness(): number[] {
-    const buf = new Uint8Array(32);
-    for (let i = 0; i < 32; i++) buf[i] = Math.floor(Math.random() * 256);
-    return Array.from(buf);
+    return Array.from(crypto.randomBytes(32));
   }
 }

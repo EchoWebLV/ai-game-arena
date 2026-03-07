@@ -331,9 +331,20 @@ async function playOnChainHand(tid: number, handNum: number) {
     if (!tournament.active[i]) localFolded[i] = true;
   }
 
-  // start_hand with randomness
-  const randomness = PokerClient.generateRandomness();
-  txLog("start_hand", await pc.startHand(tid, randomness));
+  // Start hand: try VRF first, fall back to crypto.randomBytes
+  let vrfUsed = false;
+  try {
+    const clientSeed = handNum % 256;
+    txLog("request_vrf_hand", await pc.requestStartHandVrf(tid, clientSeed));
+    const expectedHand = handNum;
+    await pc.waitForVrfCallback(pdas.gameStatePda, expectedHand, 8000);
+    vrfUsed = true;
+    console.log("  [VRF] Hand started with on-chain verifiable randomness");
+  } catch (vrfErr: any) {
+    console.warn("  [VRF] Fallback to crypto.randomBytes:", vrfErr.message?.slice(0, 80));
+    const randomness = PokerClient.generateRandomness();
+    txLog("start_hand", await pc.startHand(tid, randomness));
+  }
 
   // Deal hole cards to active players
   for (let i = 0; i < NUM_AGENTS; i++) {
@@ -1217,6 +1228,7 @@ async function main() {
     console.log(`  On-chain:     ${pokerClient ? "YES" : "NO (deploy program + set ON_CHAIN=true)"}`);
     console.log(`  OpenRouter:   ${process.env.OPENROUTER_API_KEY ? "YES" : "NO (set OPENROUTER_API_KEY)"}`);
     console.log(`  ElevenLabs:   ${process.env.ELEVENLABS_API_KEY ? "YES (TTS enabled)" : "NO (set ELEVENLABS_API_KEY for AI voices)"}`);
+    console.log(`  VRF:          YES (MagicBlock Verifiable Randomness)`);
     console.log(`  Agents:       ${AI_NAMES.join(", ")}\n`);
 
     setTimeout(() => runTournament(), 3000);
