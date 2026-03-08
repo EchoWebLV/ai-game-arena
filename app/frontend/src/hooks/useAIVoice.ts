@@ -50,18 +50,18 @@ function unlockAudio() {
 
 export function useAIVoice(logs: LogEntry[]) {
   const [muted, setMuted] = useState(() => {
-    if (typeof window === "undefined") return true;
+    if (typeof window === "undefined") return false;
     const saved = localStorage.getItem("ai-voice-muted");
-    return saved === null ? true : saved === "true";
+    return saved === "true";
   });
 
   const queueRef = useRef<{ text: string; voiceIdx: number }[]>([]);
   const playingRef = useRef(false);
   const lastLogTimestamp = useRef(0);
   const mutedRef = useRef(muted);
+  const currentAudioRef = useRef<HTMLAudioElement | null>(null);
   const audioUnlocked = useRef(false);
 
-  // Unlock audio on the first user click anywhere on the page
   useEffect(() => {
     const handler = () => {
       if (!audioUnlocked.current) {
@@ -76,17 +76,22 @@ export function useAIVoice(logs: LogEntry[]) {
   useEffect(() => {
     mutedRef.current = muted;
     localStorage.setItem("ai-voice-muted", String(muted));
+
+    if (muted) {
+      queueRef.current = [];
+      if (currentAudioRef.current) {
+        currentAudioRef.current.pause();
+        currentAudioRef.current.src = "";
+        currentAudioRef.current = null;
+      }
+      playingRef.current = false;
+    }
   }, [muted]);
 
   const playNext = useCallback(async () => {
-    if (playingRef.current) return;
+    if (playingRef.current || mutedRef.current) return;
     const next = queueRef.current.shift();
     if (!next) return;
-
-    if (mutedRef.current) {
-      playNext();
-      return;
-    }
 
     playingRef.current = true;
     try {
@@ -101,17 +106,20 @@ export function useAIVoice(logs: LogEntry[]) {
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
       audio.playbackRate = 1.25;
+      currentAudioRef.current = audio;
 
       await new Promise<void>((resolve) => {
         audio.onended = () => { URL.revokeObjectURL(url); resolve(); };
         audio.onerror = () => { URL.revokeObjectURL(url); resolve(); };
+        audio.onpause = () => { URL.revokeObjectURL(url); resolve(); };
         audio.play().catch(() => resolve());
       });
     } catch {
       // TTS unavailable — silently continue
     } finally {
+      currentAudioRef.current = null;
       playingRef.current = false;
-      playNext();
+      if (!mutedRef.current) playNext();
     }
   }, []);
 
@@ -130,7 +138,7 @@ export function useAIVoice(logs: LogEntry[]) {
     }
 
     queueRef.current.push({ text, voiceIdx: latest.playerIdx });
-    playNext();
+    if (!mutedRef.current) playNext();
   }, [logs, playNext]);
 
   const toggleMute = useCallback(() => {

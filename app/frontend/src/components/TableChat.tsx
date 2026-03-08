@@ -27,15 +27,13 @@ export default function TableChat({ logs }: TableChatProps) {
     }
   }, [logs.length]);
 
-  const recent = logs.slice(-12);
-
   return (
     <div
       ref={scrollRef}
       className="overflow-y-auto space-y-1 pr-1 scrollbar-thin"
       style={{ maxHeight: "100%" }}
     >
-      {recent.map((log, i) => {
+      {logs.map((log, i) => {
         const player = AI_PLAYERS[log.playerIdx];
         if (!player) return null;
         const isWin = log.action.startsWith("WINS");
@@ -58,7 +56,7 @@ export default function TableChat({ logs }: TableChatProps) {
             className={clsx(
               "rounded-lg px-2.5 py-1.5 backdrop-blur-sm",
               "bg-black/40 border border-white/[0.06]",
-              i === recent.length - 1 && "animate-slide-up"
+              i === logs.length - 1 && "animate-slide-up"
             )}
           >
             <div className="flex items-center gap-1.5 text-[11px]">
@@ -72,7 +70,7 @@ export default function TableChat({ logs }: TableChatProps) {
               </span>
             </div>
             {hasThought && (
-              <p className="text-[10px] leading-[1.4] text-white/50 italic mt-0.5 ml-[26px] line-clamp-2">
+              <p className="text-[10px] leading-[1.4] text-white/50 italic mt-0.5 ml-[26px]">
                 &ldquo;{log.reasoning}&rdquo;
               </p>
             )}

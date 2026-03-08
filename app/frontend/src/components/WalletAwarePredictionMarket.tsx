@@ -2,9 +2,8 @@
 
 import { useCallback, useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
-import { useConnection } from "@solana/wallet-adapter-react";
 import PredictionMarket from "./PredictionMarket";
-import { buildPlacePredictionTx } from "@/lib/market-tx";
+import { buildPlacePredictionTx, getDevnetConnection } from "@/lib/market-tx";
 
 interface Props {
   market: any;
@@ -15,7 +14,6 @@ interface Props {
 
 export default function WalletAwarePredictionMarket({ market, chipStandings, tournamentId }: Props) {
   const { publicKey, signTransaction, connected } = useWallet();
-  const { connection } = useConnection();
   const [txPending, setTxPending] = useState(false);
   const [lastError, setLastError] = useState<string | null>(null);
 
@@ -33,11 +31,12 @@ export default function WalletAwarePredictionMarket({ market, chipStandings, tou
     setLastError(null);
 
     try {
-      const tx = await buildPlacePredictionTx(connection, publicKey, tournamentId, aiIdx, isYes, amountSol);
+      const devnet = getDevnetConnection();
+      const tx = await buildPlacePredictionTx(devnet, publicKey, tournamentId, aiIdx, isYes, amountSol);
       const signed = await signTransaction(tx);
-      const sig = await connection.sendRawTransaction(signed.serialize(), { skipPreflight: true });
-      await connection.confirmTransaction(sig, "confirmed");
-      console.log("[Market] Bet placed on-chain:", sig.slice(0, 20));
+      const sig = await devnet.sendRawTransaction(signed.serialize(), { skipPreflight: true });
+      await devnet.confirmTransaction(sig, "confirmed");
+      console.log("[Market] Bet placed on-chain (devnet):", sig.slice(0, 20));
     } catch (err: any) {
       const msg = err?.message || "Transaction failed";
       console.error("[Market] Bet error:", msg.slice(0, 200));
@@ -45,7 +44,7 @@ export default function WalletAwarePredictionMarket({ market, chipStandings, tou
     } finally {
       setTxPending(false);
     }
-  }, [publicKey, signTransaction, connected, connection, tournamentId]);
+  }, [publicKey, signTransaction, connected, tournamentId]);
 
   return (
     <div>

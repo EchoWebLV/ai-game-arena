@@ -959,8 +959,9 @@ async function playOffChainHand(handNum: number) {
         reasoning = fb.reasoning || "";
       }
 
-      // Validate: can't check when there's a bet to call
+      // Validate actions against game state
       if (action === "check" && callCost > 0) action = "call";
+      if (action === "call" && callCost === 0) action = "check";
 
       switch (action) {
         case "fold":

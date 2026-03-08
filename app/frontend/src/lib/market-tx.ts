@@ -7,6 +7,16 @@ const TOURNAMENT_SEED = Buffer.from("tournament");
 const MARKET_SEED = Buffer.from("market");
 const USER_BET_SEED = Buffer.from("user_bet");
 
+const SOLANA_DEVNET_RPC = "https://api.devnet.solana.com";
+let _devnetConnection: Connection | null = null;
+
+export function getDevnetConnection(): Connection {
+  if (!_devnetConnection) {
+    _devnetConnection = new Connection(SOLANA_DEVNET_RPC, "confirmed");
+  }
+  return _devnetConnection;
+}
+
 function getMarketPda(tournamentPda: PublicKey): PublicKey {
   const [pda] = PublicKey.findProgramAddressSync(
     [MARKET_SEED, tournamentPda.toBuffer()],
