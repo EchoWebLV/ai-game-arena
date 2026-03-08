@@ -313,37 +313,54 @@ export class PokerClient {
 
   // ── VRF-based hand start ────────────────────────────────────────────────
 
-  async requestStartHandVrf(tid: number, clientSeed: number): Promise<string> {
-    const { tournamentPda, gameStatePda } = this.getAllPdas(tid);
+  getVrfResultPda(): PublicKey {
+    const [pda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("vrf_result"), this.wallet.publicKey.toBuffer()],
+      PROGRAM_ID
+    );
+    return pda;
+  }
+
+  async requestStartHandVrf(clientSeed: number): Promise<string> {
     const [programIdentity] = PublicKey.findProgramAddressSync(
       [Buffer.from("identity")],
       PROGRAM_ID
     );
+    const vrfResultPda = this.getVrfResultPda();
+
     const accs = {
       authority: this.wallet.publicKey,
-      tournament: tournamentPda,
-      gameState: gameStatePda,
+      vrfResult: vrfResultPda,
       oracleQueue: VRF_ORACLE_QUEUE,
       programIdentity,
       vrfProgram: VRF_PROGRAM,
       slotHashes: new PublicKey("SysvarS1otHashes111111111111111111111111111"),
       systemProgram: anchor.web3.SystemProgram.programId,
     };
-    return this.erWithFallback("requestStartHandVrf",
-      () => this.erProgram.methods.requestStartHand(clientSeed).accounts(accs).rpc(),
-      () => this.program.methods.requestStartHand(clientSeed).accounts(accs).rpc()
-    );
+
+    // VRF request goes to BASE layer where the oracle queue lives.
+    // Callback writes randomness to vrfResult PDA (also on base layer).
+    const sig = await this.program.methods
+      .requestStartHand(clientSeed)
+      .accounts(accs)
+      .rpc();
+    console.log("[VRF] Request sent on base layer:", sig.slice(0, 20));
+    return sig;
   }
 
-  async waitForVrfCallback(gameStatePda: PublicKey, expectedHandNumber: number, timeoutMs = 10000): Promise<void> {
+  async waitForVrfRandomness(timeoutMs = 15000): Promise<number[]> {
+    const vrfResultPda = this.getVrfResultPda();
     const start = Date.now();
     while (Date.now() - start < timeoutMs) {
       try {
-        const game = await this.fetchGameState(gameStatePda);
-        const hn = game.handNumber?.toNumber?.() ?? game.handNumber ?? 0;
-        if (hn >= expectedHandNumber) return;
+        const result = await this.program.account.vrfResult.fetch(vrfResultPda);
+        if ((result as any).fulfilled) {
+          const randomness = Array.from((result as any).randomness as Uint8Array);
+          console.log("[VRF] Randomness received from oracle:", randomness.slice(0, 4).join(",") + "...");
+          return randomness;
+        }
       } catch {}
-      await new Promise(r => setTimeout(r, 500));
+      await new Promise(r => setTimeout(r, 800));
     }
     throw new Error(`VRF callback timeout after ${timeoutMs}ms`);
   }

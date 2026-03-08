@@ -39,7 +39,9 @@
       "name": "callback_start_hand",
       "docs": [
         "VRF callback: receives verified randomness and starts the hand.",
-        "Only callable by the VRF oracle program (enforced by vrf_program_identity signer)."
+        "Only callable by the VRF oracle program (enforced by vrf_program_identity signer).",
+        "VRF oracle callback — stores verified randomness on base layer.",
+        "The backend reads this and passes it to start_hand on the ER."
       ],
       "discriminator": [
         176,
@@ -61,11 +63,8 @@
           "address": "9irBy75QS2BN81FUgXuHcjqceJJRuc9oDkAe8TKVvvAw"
         },
         {
-          "name": "game_state",
+          "name": "vrf_result",
           "writable": true
-        },
-        {
-          "name": "tournament"
         }
       ],
       "args": [
@@ -1369,8 +1368,8 @@
     {
       "name": "request_start_hand",
       "docs": [
-        "Request VRF randomness to start a new hand (provably fair shuffle).",
-        "The VRF oracle will call back `callback_start_hand` with verified randomness."
+        "Request VRF randomness. The callback writes to a base-layer VrfResult PDA",
+        "so the oracle doesn't need to touch delegated ER accounts."
       ],
       "discriminator": [
         39,
@@ -1389,11 +1388,31 @@
           "signer": true
         },
         {
-          "name": "tournament"
-        },
-        {
-          "name": "game_state",
-          "writable": true
+          "name": "vrf_result",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  114,
+                  102,
+                  95,
+                  114,
+                  101,
+                  115,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          }
         },
         {
           "name": "oracle_queue",
@@ -1701,6 +1720,19 @@
         243,
         46,
         63
+      ]
+    },
+    {
+      "name": "VrfResult",
+      "discriminator": [
+        24,
+        254,
+        248,
+        67,
+        215,
+        198,
+        47,
+        144
       ]
     }
   ],
@@ -2140,6 +2172,35 @@
           {
             "name": "bump",
             "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "VrfResult",
+      "docs": [
+        "Stores VRF randomness on the base layer (not delegated) so the oracle",
+        "callback can write here even while game_state lives on the ER."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "randomness",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "fulfilled",
+            "type": "bool"
+          },
+          {
+            "name": "authority",
+            "type": "pubkey"
           }
         ]
       }

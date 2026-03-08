@@ -120,3 +120,16 @@ pub struct UserBet {
 impl UserBet {
     pub const LEN: usize = 32 + 32 + 1 + 8 + 1 + 1;
 }
+
+/// Stores VRF randomness on the base layer (not delegated) so the oracle
+/// callback can write here even while game_state lives on the ER.
+#[account]
+pub struct VrfResult {
+    pub randomness: [u8; 32],
+    pub fulfilled: bool,
+    pub authority: Pubkey,
+}
+
+impl VrfResult {
+    pub const LEN: usize = 32 + 1 + 32;
+}

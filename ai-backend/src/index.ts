@@ -331,20 +331,20 @@ async function playOnChainHand(tid: number, handNum: number) {
     if (!tournament.active[i]) localFolded[i] = true;
   }
 
-  // Start hand: try VRF first, fall back to crypto.randomBytes
+  // Start hand: request VRF randomness from oracle, fall back to crypto.randomBytes
   let vrfUsed = false;
+  let randomness: number[];
   try {
     const clientSeed = handNum % 256;
-    txLog("request_vrf_hand", await pc.requestStartHandVrf(tid, clientSeed));
-    const expectedHand = handNum;
-    await pc.waitForVrfCallback(pdas.gameStatePda, expectedHand, 8000);
+    txLog("request_vrf", await pc.requestStartHandVrf(clientSeed));
+    randomness = await pc.waitForVrfRandomness(15000);
     vrfUsed = true;
-    console.log("  [VRF] Hand started with on-chain verifiable randomness");
+    console.log("  [VRF] On-chain verifiable randomness received");
   } catch (vrfErr: any) {
     console.warn("  [VRF] Fallback to crypto.randomBytes:", vrfErr.message?.slice(0, 80));
-    const randomness = PokerClient.generateRandomness();
-    txLog("start_hand", await pc.startHand(tid, randomness));
+    randomness = PokerClient.generateRandomness();
   }
+  txLog("start_hand", await pc.startHand(tid, randomness));
 
   // Deal hole cards to active players
   for (let i = 0; i < NUM_AGENTS; i++) {

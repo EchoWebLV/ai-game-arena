@@ -9,7 +9,7 @@ import TransactionFeed, { TxEntry } from "@/components/TransactionFeed";
 import TableChat from "@/components/TableChat";
 import { AI_PLAYERS, BACKEND_URL } from "@/lib/constants";
 import AIAvatar from "@/components/AIAvatar";
-import { Zap, Shield, Dice5, Layers, Wifi, WifiOff, Trophy, RotateCcw, Volume2, VolumeX } from "lucide-react";
+import { Zap, Dice5, Wifi, WifiOff, Trophy, RotateCcw, Volume2, VolumeX } from "lucide-react";
 import { useAIVoice } from "@/hooks/useAIVoice";
 import clsx from "clsx";
 
@@ -270,14 +270,8 @@ export default function Home() {
               <Zap size={10} className="text-[var(--gold)]" />
               <span>Ephemeral Rollups</span>
               <span className="mx-1 text-white/10">|</span>
-              <Shield size={10} className="text-blue-400" />
-              <span>Private ER</span>
-              <span className="mx-1 text-white/10">|</span>
               <Dice5 size={10} className="text-green-400" />
-              <span>VRF</span>
-              <span className="mx-1 text-white/10">|</span>
-              <Layers size={10} className="text-purple-400" />
-              <span>BOLT ECS</span>
+              <span>VRF Randomness</span>
             </div>
             <button
               onClick={toggleMute}
@@ -414,9 +408,7 @@ export default function Home() {
             <div className="flex flex-col gap-1.5">
               {[
                 { label: "Ephemeral Rollups", icon: <Zap size={9} />, color: "var(--gold)" },
-                { label: "Private ER (TEE)", icon: <Shield size={9} />, color: "#60a5fa" },
                 { label: "VRF Randomness", icon: <Dice5 size={9} />, color: "#34d399" },
-                { label: "BOLT ECS", icon: <Layers size={9} />, color: "#c084fc" },
               ].map((b) => (
                 <div key={b.label} className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-md border" style={{ color: b.color, borderColor: `${b.color}30`, background: `${b.color}08` }}>
                   {b.icon}{b.label}
