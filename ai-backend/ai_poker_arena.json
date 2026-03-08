@@ -29,6 +29,9 @@
           "signer": true
         },
         {
+          "name": "tournament"
+        },
+        {
           "name": "game_state",
           "writable": true
         }
@@ -139,12 +142,7 @@
           "writable": true
         }
       ],
-      "args": [
-        {
-          "name": "_winning_ai",
-          "type": "u8"
-        }
-      ]
+      "args": []
     },
     {
       "name": "commit_game_state",
@@ -1077,6 +1075,10 @@
           "signer": true
         },
         {
+          "name": "tournament",
+          "writable": true
+        },
+        {
           "name": "game_state",
           "writable": true
         },
@@ -1116,6 +1118,10 @@
           "name": "authority",
           "writable": true,
           "signer": true
+        },
+        {
+          "name": "tournament",
+          "writable": true
         },
         {
           "name": "game_state",
@@ -1424,6 +1430,80 @@
         }
       ],
       "args": []
+    },
+    {
+      "name": "undelegate_player",
+      "docs": [
+        "Commit and undelegate player state from ER back to base layer."
+      ],
+      "discriminator": [
+        230,
+        242,
+        176,
+        199,
+        120,
+        26,
+        119,
+        243
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "player_state",
+          "writable": true
+        },
+        {
+          "name": "magic_program",
+          "address": "Magic11111111111111111111111111111111111111"
+        },
+        {
+          "name": "magic_context",
+          "writable": true,
+          "address": "MagicContext1111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "undelegate_tournament",
+      "docs": [
+        "Commit and undelegate tournament state from ER back to base layer."
+      ],
+      "discriminator": [
+        200,
+        44,
+        210,
+        66,
+        192,
+        165,
+        119,
+        101
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "tournament",
+          "writable": true
+        },
+        {
+          "name": "magic_program",
+          "address": "Magic11111111111111111111111111111111111111"
+        },
+        {
+          "name": "magic_context",
+          "writable": true,
+          "address": "MagicContext1111111111111111111111111111111"
+        }
+      ],
+      "args": []
     }
   ],
   "accounts": [
@@ -1509,101 +1589,71 @@
   "errors": [
     {
       "code": 6000,
-      "name": "TournamentNotWaiting",
-      "msg": "Tournament is not in waiting state"
-    },
-    {
-      "code": 6001,
-      "name": "TournamentNotActive",
-      "msg": "Tournament is not active"
-    },
-    {
-      "code": 6002,
       "name": "TournamentComplete",
       "msg": "Tournament is already complete"
     },
     {
-      "code": 6003,
+      "code": 6001,
       "name": "HandNotActive",
       "msg": "Hand is not active"
     },
     {
-      "code": 6004,
+      "code": 6002,
       "name": "NotPlayerTurn",
       "msg": "Not this player's turn"
     },
     {
-      "code": 6005,
+      "code": 6003,
       "name": "PlayerFolded",
       "msg": "Player has already folded"
     },
     {
-      "code": 6006,
+      "code": 6004,
       "name": "PlayerNotActive",
       "msg": "Player is not active in tournament"
     },
     {
-      "code": 6007,
+      "code": 6005,
       "name": "InvalidBetAmount",
       "msg": "Invalid bet amount"
     },
     {
-      "code": 6008,
-      "name": "InsufficientChips",
-      "msg": "Insufficient chips"
-    },
-    {
-      "code": 6009,
+      "code": 6006,
       "name": "InvalidAction",
       "msg": "Invalid action"
     },
     {
-      "code": 6010,
-      "name": "RoundNotComplete",
-      "msg": "Round is not complete"
-    },
-    {
-      "code": 6011,
+      "code": 6007,
       "name": "CannotAdvancePastRiver",
       "msg": "Cannot advance past river"
     },
     {
-      "code": 6012,
-      "name": "NotAllPlayersActed",
-      "msg": "Not all players have acted"
-    },
-    {
-      "code": 6013,
+      "code": 6008,
       "name": "MarketClosed",
       "msg": "Prediction market is closed"
     },
     {
-      "code": 6014,
+      "code": 6009,
       "name": "MarketNotResolved",
       "msg": "Prediction market not resolved"
     },
     {
-      "code": 6015,
+      "code": 6010,
       "name": "AlreadyClaimed",
       "msg": "Already claimed winnings"
     },
     {
-      "code": 6016,
+      "code": 6011,
       "name": "NoWinnings",
       "msg": "No winnings to claim"
     },
     {
-      "code": 6017,
+      "code": 6012,
       "name": "InvalidAiModel",
       "msg": "Invalid AI model index"
     },
     {
-      "code": 6018,
-      "name": "NotEnoughPlayersForShowdown",
-      "msg": "Showdown requires at least 2 active players"
-    },
-    {
-      "code": 6019,
+      "code": 6013,
       "name": "ArithmeticOverflow",
       "msg": "Arithmetic overflow"
     }

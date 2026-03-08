@@ -21,7 +21,7 @@ const SIZE_MAP = {
 const RANK_NAMES = ["2", "3", "4", "5", "6", "7", "8", "9", "10", "j", "q", "k", "a"];
 const SUIT_LETTERS = ["H", "D", "C", "S"];
 
-const cardLib = deck as Record<string, ComponentType<React.SVGProps<SVGSVGElement>>>;
+const cardLib = deck as unknown as Record<string, ComponentType<React.SVGProps<SVGSVGElement>>>;
 const CardBack = cardLib["B1"];
 
 function getCardComponent(cardIdx: number): ComponentType<React.SVGProps<SVGSVGElement>> | null {
