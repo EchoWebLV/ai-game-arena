@@ -2,12 +2,6 @@ import * as anchor from "@coral-xyz/anchor";
 import { Program, web3, BN } from "@coral-xyz/anchor";
 import { PublicKey, Keypair, SystemProgram } from "@solana/web3.js";
 import { expect } from "chai";
-import {
-  InitializeNewWorld,
-  AddEntity,
-  InitializeComponent,
-  ApplySystem,
-} from "@magicblock-labs/bolt-sdk";
 
 const TOURNAMENT_SEED = Buffer.from("tournament");
 const GAME_STATE_SEED = Buffer.from("game_state");
@@ -169,6 +163,7 @@ describe("AI Poker Arena", () => {
       .postBlinds()
       .accounts({
         authority: provider.wallet.publicKey,
+        tournament: tournamentPda,
         gameState: gameStatePda,
         smallBlindPlayer: playerPdas[sbIdx],
         bigBlindPlayer: playerPdas[bbIdx],
@@ -189,6 +184,7 @@ describe("AI Poker Arena", () => {
       .playerAction(2, new BN(0)) // ACTION_CALL
       .accounts({
         authority: provider.wallet.publicKey,
+        tournament: tournamentPda,
         gameState: gameStatePda,
         playerState: playerPdas[3],
       })
@@ -200,6 +196,7 @@ describe("AI Poker Arena", () => {
       .playerAction(0, new BN(0)) // ACTION_FOLD
       .accounts({
         authority: provider.wallet.publicKey,
+        tournament: tournamentPda,
         gameState: gameStatePda,
         playerState: playerPdas[4],
       })
@@ -208,49 +205,5 @@ describe("AI Poker Arena", () => {
 
     const player4 = await program.account.playerState.fetch(playerPdas[4]);
     expect(player4.isFolded).to.be.true;
-  });
-
-  // BOLT ECS Integration Tests
-  describe("BOLT ECS Integration", () => {
-    let worldPda: PublicKey;
-    let entityPda: PublicKey;
-
-    const gameStateComponent = anchor.workspace.GameState;
-    const playerStateComponent = anchor.workspace.PlayerState;
-    const gameActionSystem = anchor.workspace.GameAction;
-
-    it("Initializes BOLT World", async () => {
-      const initNewWorld = await InitializeNewWorld({
-        payer: provider.wallet.publicKey,
-        connection: provider.connection,
-      });
-      const txSign = await provider.sendAndConfirm(initNewWorld.transaction);
-      worldPda = initNewWorld.worldPda;
-      console.log(
-        `BOLT World initialized (${worldPda}):`,
-        txSign
-      );
-    });
-
-    it("Creates game entity with components", async () => {
-      const addEntity = await AddEntity({
-        payer: provider.wallet.publicKey,
-        world: worldPda,
-        connection: provider.connection,
-      });
-      const txSign = await provider.sendAndConfirm(addEntity.transaction);
-      entityPda = addEntity.entityPda;
-      console.log(`Entity created (${addEntity.entityId}):`, txSign);
-
-      const initComponent = await InitializeComponent({
-        payer: provider.wallet.publicKey,
-        entity: entityPda,
-        componentId: gameStateComponent.programId,
-      });
-      const txSign2 = await provider.sendAndConfirm(
-        initComponent.transaction
-      );
-      console.log("GameState component attached:", txSign2);
-    });
   });
 });

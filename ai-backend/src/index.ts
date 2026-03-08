@@ -375,6 +375,18 @@ async function runOnChainTournament() {
     } catch (e: any) {
       console.warn("[On-chain] undelegate_game error:", e.message?.slice(0, 80));
     }
+    for (let i = 0; i < NUM_AGENTS; i++) {
+      try {
+        txLog(`undelegate_player_${i}`, await pc.undelegatePlayer(tid, i), "base");
+      } catch (e: any) {
+        console.warn(`[On-chain] undelegate_player_${i} error:`, e.message?.slice(0, 80));
+      }
+    }
+    try {
+      txLog("undelegate_tournament", await pc.undelegateTournament(tid), "base");
+    } catch (e: any) {
+      console.warn("[On-chain] undelegate_tournament error:", e.message?.slice(0, 80));
+    }
 
     await pollMarketState();
 
@@ -690,9 +702,11 @@ async function syncOnChainState(tid: number, handNum: number) {
     currentHand.currentRound =
       ["preflop", "flop", "turn", "river", "showdown"][gs.currentRound] ?? "waiting";
 
-    for (let i = 0; i < NUM_AGENTS; i++) {
-      try {
-        const ps = await pc.fetchPlayerState(pdas.playerPdas[i]);
+    try {
+      const players = await pc.fetchAllPlayerStates(pdas.playerPdas);
+      for (let i = 0; i < NUM_AGENTS; i++) {
+        const ps = players[i];
+        if (!ps) continue;
         const totalBetThisHand = ps.totalBetThisHand?.toNumber?.() ?? 0;
         currentHand.players[i] = {
           chips: tournament.chips[i] - totalBetThisHand,
@@ -702,8 +716,8 @@ async function syncOnChainState(tid: number, handNum: number) {
           isActive: ps.isActive ?? true,
           holeCards: [ps.holeCard1 ?? 255, ps.holeCard2 ?? 255],
         };
-      } catch {}
-    }
+      }
+    } catch {}
 
     tournament.handNumber = handNum;
   } catch (err: any) {

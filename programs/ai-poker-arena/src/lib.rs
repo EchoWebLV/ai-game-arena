@@ -752,9 +752,33 @@ pub mod ai_poker_arena {
         Ok(())
     }
 
+    /// Commit and undelegate tournament state from ER back to base layer.
+    pub fn undelegate_tournament(ctx: Context<UndelegateTournament>) -> Result<()> {
+        commit_and_undelegate_accounts(
+            &ctx.accounts.payer,
+            vec![&ctx.accounts.tournament.to_account_info()],
+            &ctx.accounts.magic_context,
+            &ctx.accounts.magic_program,
+        )?;
+        msg!("Tournament state undelegated from Ephemeral Rollup");
+        Ok(())
+    }
+
+    /// Commit and undelegate player state from ER back to base layer.
+    pub fn undelegate_player(ctx: Context<UndelegatePlayer>) -> Result<()> {
+        commit_and_undelegate_accounts(
+            &ctx.accounts.payer,
+            vec![&ctx.accounts.player_state.to_account_info()],
+            &ctx.accounts.magic_context,
+            &ctx.accounts.magic_program,
+        )?;
+        msg!("Player state undelegated from Ephemeral Rollup");
+        Ok(())
+    }
+
     /// Close the prediction market (authority only). Used if market needs to be
     /// closed without resolving (e.g. cancelled tournament).
-    pub fn close_market(ctx: Context<ResolveMarket>, _winning_ai: u8) -> Result<()> {
+    pub fn close_market(ctx: Context<CloseMarket>) -> Result<()> {
         let market = &mut ctx.accounts.market;
         market.is_open = false;
         msg!("Market closed by authority");
@@ -867,7 +891,7 @@ pub struct PlacePrediction<'info> {
 
 #[derive(Accounts)]
 pub struct StartHand<'info> {
-    #[account(mut)]
+    #[account(mut, constraint = authority.key() == tournament.authority)]
     pub authority: Signer<'info>,
 
     #[account(mut)]
@@ -913,7 +937,7 @@ pub struct CallbackStartHand<'info> {
 #[derive(Accounts)]
 #[instruction(player_idx: u8)]
 pub struct DealHoleCards<'info> {
-    #[account(mut)]
+    #[account(mut, constraint = authority.key() == tournament.authority)]
     pub authority: Signer<'info>,
 
     #[account(
@@ -938,12 +962,19 @@ pub struct PostBlinds<'info> {
     pub authority: Signer<'info>,
 
     #[account(mut)]
+    pub tournament: Account<'info, TournamentState>,
+
+    #[account(
+        mut,
+        constraint = game_state.tournament == tournament.key(),
+        constraint = authority.key() == tournament.authority
+    )]
     pub game_state: Account<'info, GameState>,
 
-    #[account(mut)]
+    #[account(mut, constraint = small_blind_player.game == game_state.key())]
     pub small_blind_player: Account<'info, PlayerState>,
 
-    #[account(mut)]
+    #[account(mut, constraint = big_blind_player.game == game_state.key())]
     pub big_blind_player: Account<'info, PlayerState>,
 }
 
@@ -953,6 +984,13 @@ pub struct PlayerAction<'info> {
     pub authority: Signer<'info>,
 
     #[account(mut)]
+    pub tournament: Account<'info, TournamentState>,
+
+    #[account(
+        mut,
+        constraint = game_state.tournament == tournament.key(),
+        constraint = authority.key() == tournament.authority
+    )]
     pub game_state: Account<'info, GameState>,
 
     #[account(
@@ -967,16 +1005,22 @@ pub struct AdvanceRound<'info> {
     #[account(mut)]
     pub authority: Signer<'info>,
 
-    #[account(mut)]
+    pub tournament: Account<'info, TournamentState>,
+
+    #[account(
+        mut,
+        constraint = game_state.tournament == tournament.key(),
+        constraint = authority.key() == tournament.authority
+    )]
     pub game_state: Account<'info, GameState>,
 }
 
 #[derive(Accounts)]
 pub struct Showdown<'info> {
-    #[account(mut)]
+    #[account(mut, constraint = authority.key() == tournament.authority)]
     pub authority: Signer<'info>,
 
-    #[account(mut)]
+    #[account(mut, constraint = game_state.tournament == tournament.key())]
     pub game_state: Account<'info, GameState>,
 
     #[account(mut)]
@@ -1064,5 +1108,37 @@ pub struct UndelegateGame<'info> {
 
     #[account(mut)]
     pub game_state: Account<'info, GameState>,
+}
+
+#[commit]
+#[derive(Accounts)]
+pub struct UndelegateTournament<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+
+    #[account(mut)]
+    pub tournament: Account<'info, TournamentState>,
+}
+
+#[commit]
+#[derive(Accounts)]
+pub struct UndelegatePlayer<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+
+    #[account(mut)]
+    pub player_state: Account<'info, PlayerState>,
+}
+
+#[derive(Accounts)]
+pub struct CloseMarket<'info> {
+    #[account(mut)]
+    pub authority: Signer<'info>,
+
+    #[account(
+        mut,
+        constraint = market.authority == authority.key()
+    )]
+    pub market: Account<'info, MarketState>,
 }
 

@@ -42,17 +42,21 @@ fn evaluate_5(cards: &[u8; 5]) -> u32 {
         rank_counts[r as usize] += 1;
     }
 
-    let mut fours: Vec<u8> = Vec::new();
-    let mut threes: Vec<u8> = Vec::new();
-    let mut pairs: Vec<u8> = Vec::new();
-    let mut singles: Vec<u8> = Vec::new();
+    let mut fours = [0u8; 2];
+    let mut fours_len = 0usize;
+    let mut threes = [0u8; 2];
+    let mut threes_len = 0usize;
+    let mut pairs = [0u8; 3];
+    let mut pairs_len = 0usize;
+    let mut singles = [0u8; 5];
+    let mut singles_len = 0usize;
 
     for r in (0..13u8).rev() {
         match rank_counts[r as usize] {
-            4 => fours.push(r),
-            3 => threes.push(r),
-            2 => pairs.push(r),
-            1 => singles.push(r),
+            4 => { fours[fours_len] = r; fours_len += 1; }
+            3 => { threes[threes_len] = r; threes_len += 1; }
+            2 => { pairs[pairs_len] = r; pairs_len += 1; }
+            1 => { singles[singles_len] = r; singles_len += 1; }
             _ => {}
         }
     }
@@ -62,7 +66,7 @@ fn evaluate_5(cards: &[u8; 5]) -> u32 {
         return HAND_STRAIGHT_FLUSH * 1_000_000 + high as u32 * 1000;
     }
 
-    if !fours.is_empty() {
+    if fours_len > 0 {
         let kicker = if ranks[0] != fours[0] {
             ranks[0]
         } else {
@@ -71,7 +75,7 @@ fn evaluate_5(cards: &[u8; 5]) -> u32 {
         return HAND_FOUR_KIND * 1_000_000 + fours[0] as u32 * 1000 + kicker as u32;
     }
 
-    if !threes.is_empty() && !pairs.is_empty() {
+    if threes_len > 0 && pairs_len > 0 {
         return HAND_FULL_HOUSE * 1_000_000 + threes[0] as u32 * 1000 + pairs[0] as u32;
     }
 
@@ -84,27 +88,32 @@ fn evaluate_5(cards: &[u8; 5]) -> u32 {
         return HAND_STRAIGHT * 1_000_000 + high as u32 * 1000;
     }
 
-    if !threes.is_empty() {
+    if threes_len > 0 {
+        let s0 = if singles_len > 0 { singles[0] } else { 0 };
+        let s1 = if singles_len > 1 { singles[1] } else { 0 };
         return HAND_THREE_KIND * 1_000_000
             + threes[0] as u32 * 10000
-            + singles.first().copied().unwrap_or(0) as u32 * 100
-            + singles.get(1).copied().unwrap_or(0) as u32;
+            + s0 as u32 * 100
+            + s1 as u32;
     }
 
-    if pairs.len() >= 2 {
-        let kicker = singles.first().copied().unwrap_or(0);
+    if pairs_len >= 2 {
+        let kicker = if singles_len > 0 { singles[0] } else { 0 };
         return HAND_TWO_PAIR * 1_000_000
             + pairs[0] as u32 * 10000
             + pairs[1] as u32 * 100
             + kicker as u32;
     }
 
-    if pairs.len() == 1 {
+    if pairs_len == 1 {
+        let s0 = if singles_len > 0 { singles[0] } else { 0 };
+        let s1 = if singles_len > 1 { singles[1] } else { 0 };
+        let s2 = if singles_len > 2 { singles[2] } else { 0 };
         return HAND_ONE_PAIR * 1_000_000
             + pairs[0] as u32 * 10000
-            + singles.first().copied().unwrap_or(0) as u32 * 100
-            + singles.get(1).copied().unwrap_or(0) as u32 * 10
-            + singles.get(2).copied().unwrap_or(0) as u32;
+            + s0 as u32 * 100
+            + s1 as u32 * 10
+            + s2 as u32;
     }
 
     HAND_HIGH_CARD * 1_000_000 + rank_tiebreaker(&ranks)
@@ -172,6 +181,7 @@ pub fn evaluate_best_hand(hole: [u8; 2], community: [u8; 5]) -> u32 {
 }
 
 /// Fisher-Yates shuffle using VRF randomness bytes.
+/// Uses two bytes per swap to reduce modular bias (u16 range = 65536).
 pub fn shuffle_deck(randomness: &[u8; 32]) -> [u8; 52] {
     let mut deck: [u8; 52] = [0u8; 52];
     for i in 0..52 {
@@ -181,9 +191,11 @@ pub fn shuffle_deck(randomness: &[u8; 32]) -> [u8; 52] {
     let mut rng_idx: usize = 0;
 
     for i in (1..52).rev() {
-        let rand_byte = randomness[rng_idx % 32];
-        rng_idx += 1;
-        let j = (rand_byte as usize) % (i + 1);
+        let b0 = randomness[rng_idx % 32] as u16;
+        let b1 = randomness[(rng_idx + 1) % 32] as u16;
+        rng_idx += 2;
+        let rand_val = (b0 << 8) | b1;
+        let j = (rand_val as usize) % (i + 1);
         deck.swap(i, j);
     }
 

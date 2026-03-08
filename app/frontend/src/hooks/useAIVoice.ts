@@ -49,34 +49,40 @@ function unlockAudio() {
 }
 
 export function useAIVoice(logs: LogEntry[]) {
-  const [muted, setMuted] = useState(() => {
-    if (typeof window === "undefined") return false;
-    const saved = localStorage.getItem("ai-voice-muted");
-    return saved === "true";
-  });
+  // Always start unmuted — voices play as soon as user clicks anywhere
+  const [muted, setMuted] = useState(false);
 
   const queueRef = useRef<{ text: string; voiceIdx: number }[]>([]);
   const playingRef = useRef(false);
   const lastLogTimestamp = useRef(0);
-  const mutedRef = useRef(muted);
+  const mutedRef = useRef(false);
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
   const audioUnlocked = useRef(false);
 
+  const playNextRef = useRef<() => void>(() => {});
+
+  // Unlock audio on ANY user interaction (click, keydown, touch)
   useEffect(() => {
     const handler = () => {
-      if (!audioUnlocked.current) {
-        unlockAudio();
-        audioUnlocked.current = true;
+      if (audioUnlocked.current) return;
+      unlockAudio();
+      audioUnlocked.current = true;
+      if (!mutedRef.current && queueRef.current.length > 0) {
+        setTimeout(() => playNextRef.current(), 50);
       }
     };
-    document.addEventListener("click", handler, { once: true });
-    return () => document.removeEventListener("click", handler);
+    document.addEventListener("click", handler);
+    document.addEventListener("keydown", handler);
+    document.addEventListener("touchstart", handler);
+    return () => {
+      document.removeEventListener("click", handler);
+      document.removeEventListener("keydown", handler);
+      document.removeEventListener("touchstart", handler);
+    };
   }, []);
 
   useEffect(() => {
     mutedRef.current = muted;
-    localStorage.setItem("ai-voice-muted", String(muted));
-
     if (muted) {
       queueRef.current = [];
       if (currentAudioRef.current) {
@@ -89,7 +95,7 @@ export function useAIVoice(logs: LogEntry[]) {
   }, [muted]);
 
   const playNext = useCallback(async () => {
-    if (playingRef.current || mutedRef.current) return;
+    if (playingRef.current || mutedRef.current || !audioUnlocked.current) return;
     const next = queueRef.current.shift();
     if (!next) return;
 
@@ -119,9 +125,11 @@ export function useAIVoice(logs: LogEntry[]) {
     } finally {
       currentAudioRef.current = null;
       playingRef.current = false;
-      if (!mutedRef.current) playNext();
+      if (!mutedRef.current && audioUnlocked.current) playNext();
     }
   }, []);
+
+  useEffect(() => { playNextRef.current = playNext; }, [playNext]);
 
   useEffect(() => {
     if (logs.length === 0) return;
@@ -146,7 +154,11 @@ export function useAIVoice(logs: LogEntry[]) {
       unlockAudio();
       audioUnlocked.current = true;
     }
-    setMuted((m) => !m);
+    setMuted((prev) => {
+      const next = !prev;
+      if (!next) setTimeout(() => playNextRef.current(), 0);
+      return next;
+    });
   }, []);
 
   return { muted, toggleMute };

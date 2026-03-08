@@ -104,6 +104,30 @@ export class PokerClient {
     }
   }
 
+  async fetchAllPlayerStates(pdas: PublicKey[]): Promise<(any | null)[]> {
+    try {
+      const infos = await this.erConnection.getMultipleAccountsInfo(pdas);
+      return infos.map((info, i) => {
+        if (!info) return null;
+        try {
+          return this.erProgram.coder.accounts.decode("playerState", info.data);
+        } catch {
+          return null;
+        }
+      });
+    } catch {
+      const infos = await this.connection.getMultipleAccountsInfo(pdas);
+      return infos.map((info) => {
+        if (!info) return null;
+        try {
+          return this.program.coder.accounts.decode("playerState", info.data);
+        } catch {
+          return null;
+        }
+      });
+    }
+  }
+
   async fetchTournament(pda: PublicKey): Promise<any> {
     try {
       return await this.erProgram.account.tournamentState.fetch(pda);
@@ -185,18 +209,6 @@ export class PokerClient {
     return await this.program.account.marketState.fetch(pda);
   }
 
-  async delegateAll(tid: number): Promise<void> {
-    for (let i = 0; i < MAX_PLAYERS; i++) {
-      console.log(`[Delegate] Player ${i}...`);
-      await this.delegatePlayer(tid, i);
-    }
-    console.log("[Delegate] Game state...");
-    await this.delegateGame(tid);
-    console.log("[Delegate] Tournament...");
-    await this.delegateTournament(tid);
-    console.log("[Delegate] All 7 accounts delegated to ER (market stays on base layer)");
-  }
-
   // ── ER instructions (fast game loop) ────────────────────────────────────
 
   async startHand(tid: number, randomness: number[]): Promise<string> {
@@ -241,8 +253,8 @@ export class PokerClient {
   }
 
   async postBlinds(tid: number, sbIdx: number, bbIdx: number): Promise<string> {
-    const { gameStatePda, playerPdas } = this.getAllPdas(tid);
-    const accs = { authority: this.wallet.publicKey, gameState: gameStatePda, smallBlindPlayer: playerPdas[sbIdx], bigBlindPlayer: playerPdas[bbIdx] };
+    const { tournamentPda, gameStatePda, playerPdas } = this.getAllPdas(tid);
+    const accs = { authority: this.wallet.publicKey, tournament: tournamentPda, gameState: gameStatePda, smallBlindPlayer: playerPdas[sbIdx], bigBlindPlayer: playerPdas[bbIdx] };
     return this.erWithFallback("postBlinds",
       () => this.erProgram.methods.postBlinds().accounts(accs).rpc(),
       () => this.program.methods.postBlinds().accounts(accs).rpc()
@@ -250,8 +262,8 @@ export class PokerClient {
   }
 
   async playerAction(tid: number, idx: number, actionType: number, raiseAmt: number): Promise<string> {
-    const { gameStatePda, playerPdas } = this.getAllPdas(tid);
-    const accs = { authority: this.wallet.publicKey, gameState: gameStatePda, playerState: playerPdas[idx] };
+    const { tournamentPda, gameStatePda, playerPdas } = this.getAllPdas(tid);
+    const accs = { authority: this.wallet.publicKey, tournament: tournamentPda, gameState: gameStatePda, playerState: playerPdas[idx] };
     return this.erWithFallback("playerAction",
       () => this.erProgram.methods.playerAction(actionType, new anchor.BN(raiseAmt)).accounts(accs).rpc(),
       () => this.program.methods.playerAction(actionType, new anchor.BN(raiseAmt)).accounts(accs).rpc()
@@ -259,8 +271,8 @@ export class PokerClient {
   }
 
   async advanceRound(tid: number): Promise<string> {
-    const { gameStatePda } = this.getAllPdas(tid);
-    const accs = { authority: this.wallet.publicKey, gameState: gameStatePda };
+    const { tournamentPda, gameStatePda } = this.getAllPdas(tid);
+    const accs = { authority: this.wallet.publicKey, tournament: tournamentPda, gameState: gameStatePda };
     return this.erWithFallback("advanceRound",
       () => this.erProgram.methods.advanceRound().accounts(accs).rpc(),
       () => this.program.methods.advanceRound().accounts(accs).rpc()
@@ -296,6 +308,21 @@ export class PokerClient {
       .rpc();
   }
 
+  async undelegateTournament(tid: number): Promise<string> {
+    const { tournamentPda } = this.getAllPdas(tid);
+    return await this.erProgram.methods
+      .undelegateTournament()
+      .accounts({ payer: this.wallet.publicKey, tournament: tournamentPda })
+      .rpc();
+  }
+
+  async undelegatePlayer(tid: number, idx: number): Promise<string> {
+    const { playerPdas } = this.getAllPdas(tid);
+    return await this.erProgram.methods
+      .undelegatePlayer()
+      .accounts({ payer: this.wallet.publicKey, playerState: playerPdas[idx] })
+      .rpc();
+  }
 
   // ── VRF-based hand start ────────────────────────────────────────────────
 
