@@ -181,13 +181,8 @@ export class PokerClient {
       .rpc();
   }
 
-  async delegateMarket(tid: number): Promise<string> {
-    const { tournamentPda, marketPda } = this.getAllPdas(tid);
-    return await this.program.methods
-      .delegateMarket()
-      .accounts({ payer: this.wallet.publicKey, tournament: tournamentPda, pda: marketPda })
-      .remainingAccounts([{ pubkey: ER_VALIDATOR, isSigner: false, isWritable: false }])
-      .rpc();
+  async fetchMarketState(pda: PublicKey): Promise<any> {
+    return await this.program.account.marketState.fetch(pda);
   }
 
   async delegateAll(tid: number): Promise<void> {
@@ -197,11 +192,9 @@ export class PokerClient {
     }
     console.log("[Delegate] Game state...");
     await this.delegateGame(tid);
-    console.log("[Delegate] Market...");
-    await this.delegateMarket(tid);
     console.log("[Delegate] Tournament...");
     await this.delegateTournament(tid);
-    console.log("[Delegate] All 8 accounts delegated to ER");
+    console.log("[Delegate] All 7 accounts delegated to ER (market stays on base layer)");
   }
 
   // ── ER instructions (fast game loop) ────────────────────────────────────
@@ -287,11 +280,11 @@ export class PokerClient {
     );
   }
 
-  async resolveMarket(tid: number): Promise<string> {
-    const { tournamentPda, marketPda } = this.getAllPdas(tid);
-    return await this.erProgram.methods
-      .resolveMarket()
-      .accounts({ authority: this.wallet.publicKey, tournament: tournamentPda, market: marketPda })
+  async resolveMarket(tid: number, winningAi: number): Promise<string> {
+    const { marketPda } = this.getAllPdas(tid);
+    return await this.program.methods
+      .resolveMarket(winningAi)
+      .accounts({ authority: this.wallet.publicKey, market: marketPda })
       .rpc();
   }
 
@@ -303,13 +296,6 @@ export class PokerClient {
       .rpc();
   }
 
-  async undelegateMarket(tid: number): Promise<string> {
-    const { marketPda } = this.getAllPdas(tid);
-    return await this.erProgram.methods
-      .undelegateMarket()
-      .accounts({ payer: this.wallet.publicKey, market: marketPda })
-      .rpc();
-  }
 
   // ── VRF-based hand start ────────────────────────────────────────────────
 

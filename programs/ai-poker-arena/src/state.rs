@@ -96,7 +96,8 @@ pub struct MarketState {
     pub tournament: Pubkey,
     pub authority: Pubkey,
     pub total_pool: u64,
-    pub bets_per_ai: [u64; MAX_PLAYERS],
+    pub yes_bets_per_ai: [u64; MAX_PLAYERS],
+    pub no_bets_per_ai: [u64; MAX_PLAYERS],
     pub is_open: bool,
     pub is_resolved: bool,
     pub winning_ai: Option<u8>,
@@ -104,7 +105,7 @@ pub struct MarketState {
 }
 
 impl MarketState {
-    pub const LEN: usize = 32 + 32 + 8 + (8 * MAX_PLAYERS) + 1 + 1 + 2 + 1;
+    pub const LEN: usize = 32 + 32 + 8 + (8 * MAX_PLAYERS) + (8 * MAX_PLAYERS) + 1 + 1 + 2 + 1;
 }
 
 #[account]
@@ -112,13 +113,14 @@ pub struct UserBet {
     pub user: Pubkey,
     pub market: Pubkey,
     pub ai_model_idx: u8,
+    pub is_yes: bool,
     pub amount: u64,
     pub is_claimed: bool,
     pub bump: u8,
 }
 
 impl UserBet {
-    pub const LEN: usize = 32 + 32 + 1 + 8 + 1 + 1;
+    pub const LEN: usize = 32 + 32 + 1 + 1 + 8 + 1 + 1;
 }
 
 /// Stores VRF randomness on the base layer (not delegated) so the oracle

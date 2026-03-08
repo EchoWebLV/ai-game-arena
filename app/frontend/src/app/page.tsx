@@ -16,7 +16,7 @@ import clsx from "clsx";
 const WalletNavButton = dynamic(() => import("@/components/WalletButton"), { ssr: false });
 const WalletAwarePredictionMarket = dynamic(
   () => import("@/components/WalletAwarePredictionMarket"),
-  { ssr: false, loading: () => <PredictionMarket market={{ totalPool: 0, betsPerAi: [0,0,0,0,0], isOpen: true, isResolved: false, winningAi: null }} onPlaceBet={() => {}} userBets={[]} chipStandings={[]} /> }
+  { ssr: false, loading: () => <PredictionMarket market={{ totalPool: 0, yesBets: [0,0,0,0,0], noBets: [0,0,0,0,0], isOpen: false, isResolved: false, winningAi: null }} onPlaceBet={() => {}} chipStandings={[]} walletConnected={false} /> }
 );
 
 interface PlayerData {
@@ -66,9 +66,8 @@ export default function Home() {
   const [tournamentResult, setTournamentResult] = useState<{ winner: string; winnerIdx: number; hands: number } | null>(null);
 
   const [market, setMarket] = useState({
-    totalPool: 0, betsPerAi: [0,0,0,0,0], isOpen: true, isResolved: false, winningAi: null as number | null,
+    totalPool: 0, yesBets: [0,0,0,0,0], noBets: [0,0,0,0,0], isOpen: false, isResolved: false, winningAi: null as number | null, marketPda: null as string | null,
   });
-  const [userBets, setUserBets] = useState<{ aiIdx: number; amount: number }[]>([]);
 
   const { muted, toggleMute } = useAIVoice(logs);
 
@@ -133,14 +132,18 @@ export default function Home() {
             setTournamentStatus(msg.tournament.status);
             setTournamentId(msg.tournament.tournamentId);
             if (msg.tournament.status === "betting_open") {
-              setMarket((m) => ({ ...m, isOpen: true, isResolved: false }));
               setStatusMessage("Betting is open! Place your predictions.");
             } else if (msg.tournament.status === "running") {
-              setMarket((m) => ({ ...m, isOpen: false }));
               setStatusMessage(`Tournament #${msg.tournament.tournamentId} in progress`);
             }
           }
+          if (msg.market) setMarket(msg.market);
           applyHand(msg.hand, msg.tournament);
+          break;
+        }
+
+        case "market_update": {
+          if (msg.market) setMarket(msg.market);
           break;
         }
 
@@ -150,21 +153,18 @@ export default function Home() {
           setTournamentId(t.tournamentId);
           setStatusMessage(msg.message || "");
 
+          if (msg.market) setMarket(msg.market);
+
           if (msg.phase === "betting_open") {
-            setMarket({ totalPool: 0, betsPerAi: [0,0,0,0,0], isOpen: true, isResolved: false, winningAi: null });
-            setUserBets([]);
             setLogs([]);
             setTxs([]);
             setTournamentResult(null);
-          } else if (msg.phase === "running") {
-            setMarket((m) => ({ ...m, isOpen: false }));
           } else if (msg.phase === "complete" && t.winner !== null) {
             setTournamentResult({
               winner: AI_PLAYERS[t.winner].name,
               winnerIdx: t.winner,
               hands: t.handNumber,
             });
-            setMarket((m) => ({ ...m, isResolved: true, winningAi: t.winner }));
           }
           break;
         }
@@ -233,14 +233,7 @@ export default function Home() {
     };
   }, []);
 
-  const handlePlaceBet = (aiIdx: number, amount: number) => {
-    setUserBets((prev) => [...prev, { aiIdx, amount }]);
-    setMarket((m) => ({
-      ...m,
-      totalPool: m.totalPool + amount * 1e9,
-      betsPerAi: m.betsPerAi.map((b, i) => (i === aiIdx ? b + amount * 1e9 : b)),
-    }));
-  };
+  const handlePlaceBet = () => {};
 
   const chipStandings = AI_PLAYERS.map((ai) => ({
     idx: ai.idx,
@@ -356,7 +349,6 @@ export default function Home() {
               <WalletAwarePredictionMarket
                 market={market}
                 onPlaceBet={handlePlaceBet}
-                userBets={userBets}
                 chipStandings={chipStandings}
                 tournamentId={tournamentId}
               />

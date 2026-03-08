@@ -152,6 +152,61 @@ let tournament: TournamentState = {
 
 let currentHand: HandState = makeEmptyHand();
 
+// ─── On-chain prediction market state ─────────────────────────────────────────
+interface MarketState {
+  totalPool: number;
+  yesBets: number[];
+  noBets: number[];
+  isOpen: boolean;
+  isResolved: boolean;
+  winningAi: number | null;
+  marketPda: string | null;
+}
+let market: MarketState = {
+  totalPool: 0,
+  yesBets: [0, 0, 0, 0, 0],
+  noBets: [0, 0, 0, 0, 0],
+  isOpen: false,
+  isResolved: false,
+  winningAi: null,
+  marketPda: null,
+};
+
+let marketPollInterval: ReturnType<typeof setInterval> | null = null;
+
+async function pollMarketState() {
+  if (!pokerClient || !market.marketPda) return;
+  try {
+    const { PublicKey } = await import("@solana/web3.js");
+    const pda = new PublicKey(market.marketPda);
+    const state = await pokerClient.fetchMarketState(pda);
+    const updated: MarketState = {
+      totalPool: Number(state.totalPool),
+      yesBets: state.yesBetsPerAi.map(Number),
+      noBets: state.noBetsPerAi.map(Number),
+      isOpen: state.isOpen,
+      isResolved: state.isResolved,
+      winningAi: state.winningAi !== null && state.winningAi !== undefined ? Number(state.winningAi) : null,
+      marketPda: market.marketPda,
+    };
+    if (JSON.stringify(updated) !== JSON.stringify(market)) {
+      market = updated;
+      broadcast({ type: "market_update", market });
+    }
+  } catch (e: any) {
+    // Silently ignore fetch errors during market polling
+  }
+}
+
+function startMarketPolling() {
+  if (marketPollInterval) clearInterval(marketPollInterval);
+  marketPollInterval = setInterval(pollMarketState, 3000);
+}
+
+function stopMarketPolling() {
+  if (marketPollInterval) { clearInterval(marketPollInterval); marketPollInterval = null; }
+}
+
 function makeEmptyHand(): HandState {
   return {
     pot: 0,
@@ -183,9 +238,14 @@ wss.on("connection", (ws) => {
     type: "full_state",
     tournament,
     hand: currentHand,
+    market,
     txRoute: tournament.onChain ? "MagicBlock Ephemeral Rollup" : "Off-chain simulation",
     erEndpoint: ER_RPC,
+    programId: "BJSCnCFb475uHPTi6Lee2E5SU2GToyRQEgqHJUbsN5ob",
+    solanaRpc: process.env.SOLANA_RPC || "https://api.devnet.solana.com",
   }));
+
+  ws.on("message", () => {});
 
   ws.on("close", () => {
     clients.delete(ws);
@@ -260,16 +320,19 @@ async function runOnChainTournament() {
       txLog(`init_player_${i}`, await pc.initPlayer(tid, i), "base");
     }
 
-    // 2. Open prediction market
+    // 2. Open prediction market (stays on base layer for real SOL bets)
     txLog("open_market", await pc.openMarket(tid), "base");
+    market.marketPda = pdas.marketPda.toBase58();
+    market.isOpen = true;
+    broadcast({ type: "market_update", market });
+    startMarketPolling();
 
-    // 3. Delegate ALL accounts to ER (tournament, game, market, 5 players)
-    console.log("[On-chain] Delegating all accounts to Ephemeral Rollup...");
+    // 3. Delegate game accounts to ER (market stays on base layer)
+    console.log("[On-chain] Delegating game accounts to Ephemeral Rollup...");
     for (let i = 0; i < NUM_AGENTS; i++) {
       txLog(`delegate_player_${i}`, await pc.delegatePlayer(tid, i), "base");
     }
     txLog("delegate_game", await pc.delegateGame(tid), "base");
-    txLog("delegate_market", await pc.delegateMarket(tid), "base");
     txLog("delegate_tournament", await pc.delegateTournament(tid), "base");
 
     console.log("[On-chain] Waiting for ER to pick up delegation...");
@@ -292,23 +355,28 @@ async function runOnChainTournament() {
       await delay(HAND_DELAY_MS);
     }
 
-    // 5. Resolve + undelegate (try, but don't fail the whole tournament)
+    // 5. Stop market polling, resolve market, and undelegate game
+    stopMarketPolling();
+
+    let winnerIdx = 0;
+    let bestChips = -1;
+    for (let i = 0; i < 5; i++) {
+      if (tournament.chips[i] > bestChips) { bestChips = tournament.chips[i]; winnerIdx = i; }
+    }
+
     try {
-      console.log("[On-chain] Resolving market...");
-      txLog("resolve_market", await pc.resolveMarket(tid), "base");
+      console.log("[On-chain] Resolving market on base layer...");
+      txLog("resolve_market", await pc.resolveMarket(tid, winnerIdx), "base");
     } catch (e: any) {
-      console.warn("[On-chain] resolve_market error:", e.message?.slice(0, 80));
+      console.warn("[On-chain] resolve_market error:", e.message?.slice(0, 120));
     }
     try {
       txLog("undelegate_game", await pc.undelegateGame(tid), "base");
     } catch (e: any) {
       console.warn("[On-chain] undelegate_game error:", e.message?.slice(0, 80));
     }
-    try {
-      txLog("undelegate_market", await pc.undelegateMarket(tid), "base");
-    } catch (e: any) {
-      console.warn("[On-chain] undelegate_market error:", e.message?.slice(0, 80));
-    }
+
+    await pollMarketState();
 
     console.log(`[On-chain] Tournament #${tid} complete. ${tournament.txCount} total txs.`);
   } catch (err: any) {
@@ -1078,6 +1146,17 @@ async function runTournament() {
   tournament.txCount = 0;
   tournament.lastTxSig = null;
 
+  stopMarketPolling();
+  market = {
+    totalPool: 0,
+    yesBets: [0, 0, 0, 0, 0],
+    noBets: [0, 0, 0, 0, 0],
+    isOpen: false,
+    isResolved: false,
+    winningAi: null,
+    marketPda: null,
+  };
+
   const mode = tournament.onChain ? "ON-CHAIN (MagicBlock ER)" : "OFF-CHAIN (simulation)";
   console.log(`\n══════════════════════════════════════════`);
   console.log(`  TOURNAMENT #${tournament.tournamentId} — BETTING OPEN`);
@@ -1087,6 +1166,7 @@ async function runTournament() {
   broadcast({
     type: "tournament_status",
     tournament,
+    market,
     phase: "betting_open",
     message: "Place your predictions! Tournament starting soon...",
   });
@@ -1097,11 +1177,12 @@ async function runTournament() {
   broadcast({
     type: "tournament_status",
     tournament,
+    market,
     phase: "running",
-    message: "Betting closed. Tournament starting!",
+    message: "Tournament starting! Betting stays open.",
   });
 
-  console.log(`[Tournament] Betting closed. Running hands...\n`);
+  console.log(`[Tournament] Running hands (betting still open)...\n`);
 
   if (tournament.onChain) {
     await runOnChainTournament();
@@ -1120,6 +1201,10 @@ async function runTournament() {
   }
   tournament.winner = winnerIdx;
   tournament.status = "complete";
+  stopMarketPolling();
+  market.isOpen = false;
+  market.isResolved = true;
+  market.winningAi = winnerIdx;
 
   console.log(`\n══════════════════════════════════════════`);
   console.log(`  TOURNAMENT #${tournament.tournamentId} COMPLETE`);
@@ -1130,6 +1215,7 @@ async function runTournament() {
   broadcast({
     type: "tournament_status",
     tournament,
+    market,
     phase: "complete",
     message: `${AI_NAMES[tournament.winner]} wins the tournament!`,
   });

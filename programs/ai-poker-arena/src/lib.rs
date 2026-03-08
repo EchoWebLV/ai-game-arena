@@ -109,7 +109,8 @@ pub mod ai_poker_arena {
         market.tournament = ctx.accounts.tournament.key();
         market.authority = ctx.accounts.authority.key();
         market.total_pool = 0;
-        market.bets_per_ai = [0u64; MAX_PLAYERS];
+        market.yes_bets_per_ai = [0u64; MAX_PLAYERS];
+        market.no_bets_per_ai = [0u64; MAX_PLAYERS];
         market.is_open = true;
         market.is_resolved = false;
         market.winning_ai = None;
@@ -119,16 +120,18 @@ pub mod ai_poker_arena {
         Ok(())
     }
 
-    /// Place a prediction bet on which AI will win.
+    /// Place a yes/no prediction bet on an AI. Supports multiple bets (accumulates).
     pub fn place_prediction(
         ctx: Context<PlacePrediction>,
         ai_model_idx: u8,
+        is_yes: bool,
         amount: u64,
     ) -> Result<()> {
         require!(
             (ai_model_idx as usize) < MAX_PLAYERS,
             PokerError::InvalidAiModel
         );
+        require!(amount > 0, PokerError::InvalidBetAmount);
         require!(ctx.accounts.market.is_open, PokerError::MarketClosed);
 
         let transfer_ix = anchor_lang::system_program::Transfer {
@@ -146,23 +149,33 @@ pub mod ai_poker_arena {
             .total_pool
             .checked_add(amount)
             .ok_or(PokerError::ArithmeticOverflow)?;
-        market.bets_per_ai[ai_model_idx as usize] = market.bets_per_ai[ai_model_idx as usize]
-            .checked_add(amount)
-            .ok_or(PokerError::ArithmeticOverflow)?;
+
+        if is_yes {
+            market.yes_bets_per_ai[ai_model_idx as usize] = market.yes_bets_per_ai[ai_model_idx as usize]
+                .checked_add(amount)
+                .ok_or(PokerError::ArithmeticOverflow)?;
+        } else {
+            market.no_bets_per_ai[ai_model_idx as usize] = market.no_bets_per_ai[ai_model_idx as usize]
+                .checked_add(amount)
+                .ok_or(PokerError::ArithmeticOverflow)?;
+        }
 
         let user_bet = &mut ctx.accounts.user_bet;
         user_bet.user = ctx.accounts.user.key();
         user_bet.market = market.key();
         user_bet.ai_model_idx = ai_model_idx;
-        user_bet.amount = amount;
+        user_bet.is_yes = is_yes;
+        user_bet.amount = user_bet.amount.checked_add(amount).ok_or(PokerError::ArithmeticOverflow)?;
         user_bet.is_claimed = false;
         user_bet.bump = ctx.bumps.user_bet;
 
         msg!(
-            "User {} bet {} lamports on AI #{}",
+            "User {} bet {} lamports {} on AI #{} (total: {})",
             ctx.accounts.user.key(),
             amount,
-            ai_model_idx
+            if is_yes { "YES" } else { "NO" },
+            ai_model_idx,
+            user_bet.amount
         );
         Ok(())
     }
@@ -591,28 +604,24 @@ pub mod ai_poker_arena {
     }
 
     /// Resolve the prediction market after tournament ends.
-    pub fn resolve_market(ctx: Context<ResolveMarket>) -> Result<()> {
-        let tournament = &ctx.accounts.tournament;
-        let market = &mut ctx.accounts.market;
-
+    /// Only the market authority (backend) can resolve. Accepts the winning AI index.
+    pub fn resolve_market(ctx: Context<ResolveMarket>, winning_ai: u8) -> Result<()> {
         require!(
-            tournament.status == STATUS_COMPLETE,
-            PokerError::TournamentNotActive
+            (winning_ai as usize) < MAX_PLAYERS,
+            PokerError::InvalidAiModel
         );
-        require!(tournament.winner.is_some(), PokerError::TournamentNotActive);
 
+        let market = &mut ctx.accounts.market;
         market.is_open = false;
         market.is_resolved = true;
-        market.winning_ai = tournament.winner;
+        market.winning_ai = Some(winning_ai);
 
-        msg!(
-            "Market resolved! Winning AI: #{}",
-            tournament.winner.unwrap()
-        );
+        msg!("Market resolved! Winning AI: #{}", winning_ai);
         Ok(())
     }
 
     /// Claim prediction market winnings.
+    /// YES bettors win if their AI won. NO bettors win if their AI lost.
     pub fn claim_winnings(ctx: Context<ClaimWinnings>) -> Result<()> {
         let market = &ctx.accounts.market;
         let user_bet = &mut ctx.accounts.user_bet;
@@ -621,21 +630,33 @@ pub mod ai_poker_arena {
         require!(!user_bet.is_claimed, PokerError::AlreadyClaimed);
 
         let winning_ai = market.winning_ai.ok_or(PokerError::MarketNotResolved)?;
-        require!(
-            user_bet.ai_model_idx == winning_ai,
-            PokerError::NoWinnings
-        );
+        let ai_idx = user_bet.ai_model_idx as usize;
 
-        let winning_pool = market.bets_per_ai[winning_ai as usize];
-        if winning_pool == 0 {
+        let user_won = if user_bet.is_yes {
+            user_bet.ai_model_idx == winning_ai
+        } else {
+            user_bet.ai_model_idx != winning_ai
+        };
+        require!(user_won, PokerError::NoWinnings);
+
+        // For a given AI's binary market: pool = yes_bets + no_bets
+        let ai_pool = market.yes_bets_per_ai[ai_idx]
+            .checked_add(market.no_bets_per_ai[ai_idx])
+            .ok_or(PokerError::ArithmeticOverflow)?;
+        let winning_side_pool = if user_bet.is_yes {
+            market.yes_bets_per_ai[ai_idx]
+        } else {
+            market.no_bets_per_ai[ai_idx]
+        };
+        if winning_side_pool == 0 || ai_pool == 0 {
             return Err(PokerError::NoWinnings.into());
         }
 
-        // Payout = (user_bet / total_winning_bets) * total_pool
+        // Payout = (user_bet / winning_side_pool) * ai_pool
         let payout = (user_bet.amount as u128)
-            .checked_mul(market.total_pool as u128)
+            .checked_mul(ai_pool as u128)
             .ok_or(PokerError::ArithmeticOverflow)?
-            .checked_div(winning_pool as u128)
+            .checked_div(winning_side_pool as u128)
             .ok_or(PokerError::ArithmeticOverflow)? as u64;
 
         **ctx
@@ -731,44 +752,12 @@ pub mod ai_poker_arena {
         Ok(())
     }
 
-    /// Delegate market state to Ephemeral Rollup for ~50ms prediction bets.
-    pub fn delegate_market(ctx: Context<DelegateMarket>) -> Result<()> {
-        ctx.accounts.delegate_pda(
-            &ctx.accounts.payer,
-            &[
-                MARKET_SEED,
-                ctx.accounts.tournament.key().as_ref(),
-            ],
-            DelegateConfig {
-                validator: ctx.remaining_accounts.first().map(|acc| acc.key()),
-                ..Default::default()
-            },
-        )?;
-        msg!("Market state delegated to Ephemeral Rollup for fast predictions");
-        Ok(())
-    }
-
-    /// Commit market state and undelegate from ER back to base layer.
-    pub fn undelegate_market(ctx: Context<UndelegateMarket>) -> Result<()> {
-        commit_and_undelegate_accounts(
-            &ctx.accounts.payer,
-            vec![&ctx.accounts.market.to_account_info()],
-            &ctx.accounts.magic_context,
-            &ctx.accounts.magic_program,
-        )?;
-        msg!("Market state undelegated from Ephemeral Rollup");
-        Ok(())
-    }
-
-    /// Commit market state from ER to base layer (without undelegating).
-    pub fn commit_market_state(ctx: Context<UndelegateMarket>) -> Result<()> {
-        commit_accounts(
-            &ctx.accounts.payer,
-            vec![&ctx.accounts.market.to_account_info()],
-            &ctx.accounts.magic_context,
-            &ctx.accounts.magic_program,
-        )?;
-        msg!("Market state committed to base layer");
+    /// Close the prediction market (authority only). Used if market needs to be
+    /// closed without resolving (e.g. cancelled tournament).
+    pub fn close_market(ctx: Context<ResolveMarket>, _winning_ai: u8) -> Result<()> {
+        let market = &mut ctx.accounts.market;
+        market.is_open = false;
+        msg!("Market closed by authority");
         Ok(())
     }
 }
@@ -852,7 +841,7 @@ pub struct OpenMarket<'info> {
 }
 
 #[derive(Accounts)]
-#[instruction(ai_model_idx: u8, amount: u64)]
+#[instruction(ai_model_idx: u8, is_yes: bool, amount: u64)]
 pub struct PlacePrediction<'info> {
     #[account(mut)]
     pub user: Signer<'info>,
@@ -865,10 +854,10 @@ pub struct PlacePrediction<'info> {
     pub market: Account<'info, MarketState>,
 
     #[account(
-        init,
+        init_if_needed,
         payer = user,
         space = 8 + UserBet::LEN,
-        seeds = [USER_BET_SEED, market.key().as_ref(), user.key().as_ref()],
+        seeds = [USER_BET_SEED, market.key().as_ref(), user.key().as_ref(), &[ai_model_idx], &[is_yes as u8]],
         bump
     )]
     pub user_bet: Account<'info, UserBet>,
@@ -1010,11 +999,9 @@ pub struct ResolveMarket<'info> {
     #[account(mut)]
     pub authority: Signer<'info>,
 
-    pub tournament: Account<'info, TournamentState>,
-
     #[account(
         mut,
-        constraint = market.tournament == tournament.key()
+        constraint = market.authority == authority.key()
     )]
     pub market: Account<'info, MarketState>,
 }
@@ -1079,24 +1066,3 @@ pub struct UndelegateGame<'info> {
     pub game_state: Account<'info, GameState>,
 }
 
-#[delegate]
-#[derive(Accounts)]
-pub struct DelegateMarket<'info> {
-    pub payer: Signer<'info>,
-
-    pub tournament: Account<'info, TournamentState>,
-
-    /// CHECK: The market PDA to delegate
-    #[account(mut, del)]
-    pub pda: AccountInfo<'info>,
-}
-
-#[commit]
-#[derive(Accounts)]
-pub struct UndelegateMarket<'info> {
-    #[account(mut)]
-    pub payer: Signer<'info>,
-
-    #[account(mut)]
-    pub market: Account<'info, MarketState>,
-}
