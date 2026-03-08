@@ -83,19 +83,13 @@ export function useAIVoice(logs: LogEntry[]) {
 
   useEffect(() => {
     mutedRef.current = muted;
-    if (muted) {
-      queueRef.current = [];
-      if (currentAudioRef.current) {
-        currentAudioRef.current.pause();
-        currentAudioRef.current.src = "";
-        currentAudioRef.current = null;
-      }
-      playingRef.current = false;
+    if (currentAudioRef.current) {
+      currentAudioRef.current.volume = muted ? 0 : 1;
     }
   }, [muted]);
 
   const playNext = useCallback(async () => {
-    if (playingRef.current || mutedRef.current || !audioUnlocked.current) return;
+    if (playingRef.current || !audioUnlocked.current) return;
     const next = queueRef.current.shift();
     if (!next) return;
 
@@ -112,12 +106,12 @@ export function useAIVoice(logs: LogEntry[]) {
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
       audio.playbackRate = 1.25;
+      audio.volume = mutedRef.current ? 0 : 1;
       currentAudioRef.current = audio;
 
       await new Promise<void>((resolve) => {
         audio.onended = () => { URL.revokeObjectURL(url); resolve(); };
         audio.onerror = () => { URL.revokeObjectURL(url); resolve(); };
-        audio.onpause = () => { URL.revokeObjectURL(url); resolve(); };
         audio.play().catch(() => resolve());
       });
     } catch {
@@ -125,7 +119,7 @@ export function useAIVoice(logs: LogEntry[]) {
     } finally {
       currentAudioRef.current = null;
       playingRef.current = false;
-      if (!mutedRef.current && audioUnlocked.current) playNext();
+      if (audioUnlocked.current) playNext();
     }
   }, []);
 
@@ -146,7 +140,7 @@ export function useAIVoice(logs: LogEntry[]) {
     }
 
     queueRef.current.push({ text, voiceIdx: latest.playerIdx });
-    if (!mutedRef.current) playNext();
+    playNext();
   }, [logs, playNext]);
 
   const toggleMute = useCallback(() => {
@@ -154,11 +148,7 @@ export function useAIVoice(logs: LogEntry[]) {
       unlockAudio();
       audioUnlocked.current = true;
     }
-    setMuted((prev) => {
-      const next = !prev;
-      if (!next) setTimeout(() => playNextRef.current(), 0);
-      return next;
-    });
+    setMuted((prev) => !prev);
   }, []);
 
   return { muted, toggleMute };
