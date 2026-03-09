@@ -707,9 +707,8 @@ async function syncOnChainState(tid: number, handNum: number) {
       for (let i = 0; i < NUM_AGENTS; i++) {
         const ps = players[i];
         if (!ps) continue;
-        const totalBetThisHand = ps.totalBetThisHand?.toNumber?.() ?? 0;
         currentHand.players[i] = {
-          chips: tournament.chips[i] - totalBetThisHand,
+          chips: ps.chips?.toNumber?.() ?? 0,
           currentBet: ps.currentBet?.toNumber?.() ?? ps.currentBet ?? 0,
           isFolded: ps.isFolded ?? false,
           isAllIn: ps.isAllIn ?? false,
