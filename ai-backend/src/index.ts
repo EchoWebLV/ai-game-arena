@@ -476,8 +476,8 @@ async function playOnChainHand(tid: number, handNum: number) {
     console.log(`  [${roundNames[roundIdx].toUpperCase()}]`);
     await delay(roundIdx > 0 ? CARD_REVEAL_DELAY_MS : ACTION_DELAY_MS);
 
-    // Use local state — how many players can act (not folded, not all-in)?
-    const canActCount = localFolded.filter((f, i) => !f && !localAllIn[i]).length;
+    // Use local state — how many players can act (not folded, not all-in, has chips)?
+    const canActCount = localFolded.filter((f, i) => !f && !localAllIn[i] && tournament.chips[i] > 0).length;
     if (canActCount <= 1) {
       const reason = canActCount === 0 ? "all-in runout" : "only 1 can act";
       console.log(`  (no betting — ${reason}, canAct=${canActCount})`);
@@ -492,7 +492,7 @@ async function playOnChainHand(tid: number, handNum: number) {
     const turnOrder: number[] = [];
     for (let a = 0; a < NUM_AGENTS; a++) {
       const pIdx = (startIdx + a) % NUM_AGENTS;
-      if (!localFolded[pIdx] && !localAllIn[pIdx]) turnOrder.push(pIdx);
+      if (!localFolded[pIdx] && !localAllIn[pIdx] && tournament.chips[pIdx] > 0) turnOrder.push(pIdx);
     }
 
     // Betting loop with local needsToAct tracking
@@ -852,7 +852,7 @@ async function playOffChainHand(handNum: number) {
       chips: chips[i],
       currentBet: bets[i],
       isFolded: folded[i],
-      isAllIn: false,
+      isAllIn: allIn[i],
       isActive: tournament.active[i],
       holeCards: holeCards[i],
     })),
@@ -897,12 +897,12 @@ async function playOffChainHand(handNum: number) {
     console.log(`  [${round.name.toUpperCase()}] Community: ${round.cards.length > 0 ? round.cards.join(", ") : "—"}`);
     await delay(round.name === "preflop" ? ACTION_DELAY_MS : CARD_REVEAL_DELAY_MS);
 
-    // Determine who can act this round (active, not folded, not all-in)
+    // Determine who can act this round (active, not folded, not all-in, has chips)
     const canActList: number[] = [];
     const startIdx = round.name === "preflop" ? (bbIdx + 1) % 5 : (dealerIdx + 1) % 5;
     for (let a = 0; a < 5; a++) {
       const pIdx = (startIdx + a) % 5;
-      if (tournament.active[pIdx] && !folded[pIdx] && !allIn[pIdx]) {
+      if (tournament.active[pIdx] && !folded[pIdx] && !allIn[pIdx] && chips[pIdx] > 0) {
         canActList.push(pIdx);
       }
     }
@@ -974,8 +974,10 @@ async function playOffChainHand(handNum: number) {
       }
 
       // Validate actions against game state
-      if (action === "check" && callCost > 0) action = "call";
-      if (action === "call" && callCost === 0) action = "check";
+      if (chips[pIdx] <= 0) { action = "check"; }
+      else if (action === "all_in" && chips[pIdx] === 0) { action = "check"; }
+      else if (action === "check" && callCost > 0) action = "call";
+      else if (action === "call" && callCost === 0) action = "check";
 
       switch (action) {
         case "fold":
@@ -1102,6 +1104,8 @@ async function playOffChainHand(handNum: number) {
     if (tournament.active[i] && chips[i] <= 0) {
       tournament.active[i] = false;
       chips[i] = 0;
+      allIn[i] = false;
+      folded[i] = true;
       console.log(`  ✗ ${AI_NAMES[i]} eliminated`);
     }
   }
